@@ -232,8 +232,6 @@ views.schedule=(()=>{
     if(wrap){
       const h=Math.max(0,new Date().getHours()-HOUR_START-1);
       wrap.scrollTop=h*ROW;
-      const todayHead=$(".week-head.today",wrap);
-      if(todayHead) wrap.scrollLeft=Math.max(0,todayHead.offsetLeft-60);
     }
   }
 

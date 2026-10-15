@@ -477,6 +477,76 @@ async function searchPlacesExternal(query){
   }catch(e){ console.warn("Photon failed",e); return []; }
 }
 
+// Places matching `query` around the visible map, nearest to `center` first,
+// like Google Maps: search the view, then a wider area, then all of Singapore
+// until there are enough results. Uses OpenStreetMap (Nominatim).
+const KIND_LABELS={fast_food:"Fast food",restaurant:"Restaurant",cafe:"Café",food_court:"Food court",bar:"Bar",
+  supermarket:"Supermarket",convenience:"Convenience store",mall:"Shopping mall",bank:"Bank",atm:"ATM",
+  pharmacy:"Pharmacy",clinic:"Clinic",hospital:"Hospital",station:"Station",subway_entrance:"MRT entrance",
+  bus_stop:"Bus stop",school:"School",university:"University",library:"Library",gym:"Gym",fitness_centre:"Gym",
+  park:"Park",hotel:"Hotel",cinema:"Cinema",parking:"Car park",post_office:"Post office",bakery:"Bakery"};
+
+const areaSearchCache=new Map();
+let lastNominatimAt=0;
+
+async function searchPlacesInArea(query,bounds,center,{min=8}={}){
+  const q=String(query||"").trim();
+  if(q.length<2) return [];
+  // Nominatim asks for at most one request a second.
+  const run=async(viewbox,bounded)=>{
+    const key=`${q.toLowerCase()}|${viewbox}|${bounded}`;
+    if(areaSearchCache.has(key)) return areaSearchCache.get(key);
+    const wait=1100-(Date.now()-lastNominatimAt);
+    if(wait>0) await new Promise(r=>setTimeout(r,wait));
+    lastNominatimAt=Date.now();
+    const params=new URLSearchParams({q,format:"jsonv2",limit:"40",addressdetails:"1",countrycodes:"sg",viewbox,bounded:bounded?"1":"0"});
+    const data=await getJSON(`https://nominatim.openstreetmap.org/search?${params}`,{timeout:10000});
+    areaSearchCache.set(key,data);
+    return data;
+  };
+  const box=(b,f)=>{
+    const cLat=(b.n+b.s)/2, cLng=(b.e+b.w)/2, hLat=(b.n-b.s)/2*f, hLng=(b.e-b.w)/2*f;
+    return `${(cLng-hLng).toFixed(5)},${(cLat+hLat).toFixed(5)},${(cLng+hLng).toFixed(5)},${(cLat-hLat).toFixed(5)}`;
+  };
+  const seen=new Set(), out=[];
+  const add=rows=>{
+    for(const x of rows||[]){
+      const lat=+x.lat, lng=+x.lon;
+      if(!Number.isFinite(lat)||!Number.isFinite(lng)) continue;
+      const a=x.address||{};
+      const name=x.name||a[x.type]||q;
+      const street=[a.house_number,a.road].filter(Boolean).join(" ");
+      const area=a.suburb||a.neighbourhood||a.quarter||a.city_district||"";
+      // One entry per place: the same outlet can appear as a node and a building.
+      const key=`${name.toLowerCase()}|${Math.round(lat*2000)}|${Math.round(lng*2000)}`;
+      if(seen.has(key)) continue;
+      seen.add(key);
+      out.push({type:"place",osmType:x.type,code:name,name:[street,area].filter(Boolean).join(", ")||x.display_name,
+        kind:KIND_LABELS[x.type]||"",lat,lng,distance:distanceM(center,{lat,lng})});
+    }
+  };
+  // Keep places whose name contains every word searched for ("mcdonald"
+  // matches "McDonald's"), and leave out their car parks unless asked for.
+  const words=q.toLowerCase().replace(/[^a-z0-9 ]/g,"").split(/\s+/).filter(Boolean);
+  const wantsParking=/park/i.test(q);
+  const matches=()=>out.filter(p=>{
+    const n=p.code.toLowerCase().replace(/[^a-z0-9 ]/g,"");
+    return words.every(w=>n.includes(w)) && (wantsParking || !(p.osmType==="parking"||/parking/i.test(p.code)));
+  });
+  // Nominatim only returns many results for a bounded box, so widen in steps
+  // and finish with the whole of Singapore.
+  try{
+    for(const f of [1.2,4,12]){
+      add(await run(box(bounds,f),true));
+      if(matches().length>=min) break;
+    }
+    if(matches().length<min) add(await run("103.59,1.48,104.10,1.20",true));
+  }catch(err){ console.warn("Area search failed",err); }
+  // Addresses and areas don't contain the words; fall back to everything.
+  const named=matches();
+  return (named.length?named:out).sort((a,b)=>a.distance-b.distance);
+}
+
 // Resolve a venue name (e.g. a lesson's "COM1-0210") to a map location.
 async function resolveVenue(name){
   const q=normaliseCode(name);

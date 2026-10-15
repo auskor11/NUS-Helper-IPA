@@ -7,6 +7,7 @@ views.map=(()=>{
   let el=null, map=null, ready=false;
   let nusMarkers=new Map(), nusLayer=null, publicLayer=null, savedLayer=null, pinMarker=null, meMarker=null, watchId=null;
   let selected=null, refreshTimer=null, searchTimer=null, pendingParams=null, routeLayer=null;
+  let resultsLayer=null, lastSearch=null;
 
   // Dynamic Island / lock screen trip tracking (iOS app only).
   // Native plugin from ios/App/App/Trip (NUS Helper IPA); absent on the web.
@@ -59,6 +60,10 @@ views.map=(()=>{
       nusMarkers.set(s.code,m);
     }
     map.on("moveend",renderPublicStops);
+    map.on("moveend",()=>{
+      const b=$("#searchArea",el);
+      if(b && lastSearch && map.getCenter().distanceTo(lastSearch.center)>300) b.hidden=false;
+    });
     map.on("click",()=>{ hideResults(); $("#layersMenu",el).hidden=true; });
     loadPublicStops().then(renderPublicStops);
     ready=true;
@@ -592,25 +597,88 @@ views.map=(()=>{
   }
 
   /* ---------- Search ---------- */
+  // Typing shows NUS venues, stops and saved places instantly, then places
+  // around the visible map (nearest first). Enter shows every result as a
+  // pin; moving the map offers "Search this area".
 
   function hideResults(){ const r=$("#mapResults",el); if(r){ r.hidden=true; r.innerHTML=""; } }
 
-  function showResults(rows,{query="",searching=false}={}){
+  function resultIcon(p){
+    if(p.type==="saved") return icon((PLACE_ICONS[p.icon]||PLACE_ICONS.star).path,16);
+    if(p.type==="nus"||p.type==="public") return icon("M8 6v6M16 6v6M2 12h20M6 3h12a3 3 0 0 1 3 3v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a3 3 0 0 1 3-3z",16);
+    return icon("M12 21s-7-6.2-7-11.5a7 7 0 0 1 14 0C19 14.8 12 21 12 21z",16);
+  }
+
+  function resultSub(p){
+    if(p.type==="public") return `Bus stop ${p.code}${p.road?` · ${p.road}`:""}`;
+    if(p.type==="place") return [p.kind,p.name].filter(Boolean).join(" · ");
+    return p.name!==p.code?`${placeKindLabel(p)} · ${p.name}`:placeKindLabel(p);
+  }
+
+  function showResults(local,nearby,{query="",loading=false}={}){
     const r=$("#mapResults",el);
+    const rows=[...local,...nearby];
     r.hidden=false;
-    r.innerHTML=rows.map((p,i)=>`
+    const row=(p,i)=>`
       <button class="result-row" data-i="${i}">
-        <span class="result-icon t-${p.type}">${p.type==="saved"?icon((PLACE_ICONS[p.icon]||PLACE_ICONS.star).path,16):p.type==="nus"||p.type==="public"?icon("M8 6v6M16 6v6M2 12h20M6 3h12a3 3 0 0 1 3 3v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a3 3 0 0 1 3-3z",16):icon("M12 21s-7-6.2-7-11.5a7 7 0 0 1 14 0C19 14.8 12 21 12 21z",16)}</span>
-        <span><b>${esc(p.type==="public"?p.name:p.code)}</b><small>${esc(p.type==="public"?`Bus stop ${p.code}${p.road?` · ${p.road}`:""}`:p.name!==p.code?`${placeKindLabel(p)} · ${p.name}`:placeKindLabel(p))}</small></span>
-      </button>`).join("")
-      +(searching?`<div class="result-status"><span class="spinner sm"></span>Searching the map…</div>`
-        :query.length>=3?`<button class="result-row more" id="searchWider"><span class="result-icon">${icon("M11 19a8 8 0 1 0 0-16 8 8 0 0 0 0 16zM21 21l-4.3-4.3",16)}</span><span><b>Search all of Singapore</b><small>Addresses, malls, MRT stations…</small></span></button>`:"");
+        <span class="result-icon t-${p.type}">${resultIcon(p)}</span>
+        <span class="result-text"><b>${esc(p.type==="public"?p.name:p.code)}</b><small>${esc(resultSub(p))}</small></span>
+        ${p.distance!=null?`<span class="result-dist">${distanceLabel(p.distance)}</span>`:""}
+      </button>`;
+    r.innerHTML=local.map((p,i)=>row(p,i)).join("")
+      +(nearby.length?`<div class="result-head">Near this area</div>${nearby.map((p,i)=>row(p,local.length+i)).join("")}`:"")
+      +(loading?`<div class="result-status"><span class="spinner sm"></span>Searching nearby…</div>`:"")
+      +(!loading&&nearby.length>1?`<button class="result-row more" id="showAllPins"><span class="result-icon">${icon("M12 21s-7-6.2-7-11.5a7 7 0 0 1 14 0C19 14.8 12 21 12 21z",16)}</span><span class="result-text"><b>Show all ${nearby.length} on map</b></span></button>`:"")
+      +(!loading&&!rows.length&&query?`<div class="result-status">No results for “${esc(query)}”.</div>`:"");
     $$(".result-row[data-i]",r).forEach(b=>b.onclick=()=>choose(rows[+b.dataset.i]));
-    $("#searchWider",r)?.addEventListener("click",()=>searchWide(query,rows));
+    $("#showAllPins",r)?.addEventListener("click",()=>showPins(nearby,query));
+  }
+
+  function viewBounds(){
+    const b=map.getBounds();
+    return {n:b.getNorth(),s:b.getSouth(),e:b.getEast(),w:b.getWest()};
+  }
+
+  async function runSearch(q,{pins=false}={}){
+    const input=$("#mapSearch",el);
+    const local=await searchPlacesLocal(q,{limit:pins?4:6});
+    if(input.value.trim()!==q) return;
+    showResults(local,[],{query:q,loading:q.length>=3});
+    if(q.length<3) return;
+    const c=map.getCenter();
+    const nearby=await searchPlacesInArea(q,viewBounds(),{lat:c.lat,lng:c.lng});
+    if(input.value.trim()!==q) return;
+    showResults(local,nearby.slice(0,15),{query:q});
+    if(pins && nearby.length) showPins(nearby,q);
+  }
+
+  // Drop a pin for every result and fit them on screen.
+  function showPins(rows,query){
+    clearPins();
+    hideResults();
+    $("#mapSearch",el).blur();
+    resultsLayer=L.layerGroup(rows.map(p=>L.marker([p.lat,p.lng],{icon:L.divIcon({className:"",html:`<div class="mk-result">${icon("M12 21s-7-6.2-7-11.5a7 7 0 0 1 14 0C19 14.8 12 21 12 21z",13)}</div>`,iconSize:[26,26],iconAnchor:[13,13]}),title:p.code,zIndexOffset:900})
+      .on("click",()=>selectPlace(p)))).addTo(map);
+    const near=rows.slice(0,10).map(p=>[p.lat,p.lng]);
+    lastSearch=null;
+    map.fitBounds(L.latLngBounds(near),{padding:[50,50],paddingTopLeft:[40,170],maxZoom:17});
+    // Remember where the results were shown only once the map has settled,
+    // so fitting them doesn't itself offer "Search this area".
+    const settle=()=>{ if(!lastSearch) lastSearch={query,center:map.getCenter()}; };
+    map.once("moveend",settle);
+    setTimeout(settle,1200); // in case the map didn't need to move
+    $("#searchArea",el).hidden=true;
+  }
+
+  function clearPins(){
+    if(resultsLayer){ resultsLayer.remove(); resultsLayer=null; }
+    lastSearch=null;
+    const b=$("#searchArea",el); if(b) b.hidden=true;
   }
 
   async function choose(p){
     $("#mapSearch",el).blur();
+    hideResults();
     if(p.type==="nus"||p.type==="public") return selectStop(p);
     if(p.lat==null){
       const loc=await resolveVenue(p.code);
@@ -618,17 +686,6 @@ views.map=(()=>{
       p={...p,lat:loc.lat,lng:loc.lng};
     }
     selectPlace(p);
-  }
-
-  async function searchWide(query,localRows=[]){
-    showResults(localRows,{query,searching:true});
-    const ext=await searchPlacesExternal(query);
-    if($("#mapSearch",el).value.trim()!==query) return;
-    if(!localRows.length && !ext.length){
-      $("#mapResults",el).innerHTML=`<div class="result-status">No results for “${esc(query)}”.</div>`;
-      return;
-    }
-    showResults([...localRows,...ext],{query:""});
   }
 
   /* ---------- Deep links ---------- */
@@ -655,10 +712,11 @@ views.map=(()=>{
       <div class="map-top">
         <div class="map-search">
           ${icon("M11 19a8 8 0 1 0 0-16 8 8 0 0 0 0 16zM21 21l-4.3-4.3",18)}
-          <input id="mapSearch" type="search" placeholder="Search venues, bus stops, places" autocomplete="off" enterkeyhint="search">
+          <input id="mapSearch" type="search" placeholder="Search venues, bus stops, places" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" enterkeyhint="search">
           <button class="clear-btn" id="mapClear" hidden aria-label="Clear">${icon("M6 6l12 12M18 6 6 18",16)}</button>
         </div>
         <div id="mapResults" class="map-results" hidden></div>
+        <button class="chip solid search-area" id="searchArea" hidden>${icon("M21 12a9 9 0 1 1-3-6.7L21 8M21 3v5h-5",14)}Search this area</button>
         <div class="map-chips">
           <span id="savedChips" class="saved-chips"></span>
           <button class="chip solid" id="chipNearby">${icon("M8 6v6M16 6v6M2 12h20M6 3h12a3 3 0 0 1 3 3v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a3 3 0 0 1 3-3z",14)}Shuttles near me</button>
@@ -676,21 +734,21 @@ views.map=(()=>{
       $("#mapClear",el).hidden=!q;
       clearTimeout(searchTimer);
       if(!q){ hideResults(); return; }
-      searchTimer=setTimeout(async()=>{
-        const rows=await searchPlacesLocal(q,{limit:8});
-        if(input.value.trim()===q) showResults(rows,{query:q});
-      },120);
+      // Local results right away; the area search waits for a pause in typing.
+      searchPlacesLocal(q,{limit:6}).then(rows=>{ if(input.value.trim()===q) showResults(rows,[],{query:q,loading:q.length>=3}); });
+      searchTimer=setTimeout(()=>runSearch(q),650);
     });
-    input.addEventListener("keydown",async e=>{
+    input.addEventListener("keydown",e=>{
       if(e.key!=="Enter") return;
       e.preventDefault();
       const q=input.value.trim();
       if(!q) return;
-      const rows=await searchPlacesLocal(q,{limit:8});
-      if(rows[0]?.score>=80) choose(rows[0]);
-      else searchWide(q,rows);
+      clearTimeout(searchTimer);
+      runSearch(q,{pins:true});
     });
-    $("#mapClear",el).onclick=()=>{ input.value=""; $("#mapClear",el).hidden=true; hideResults(); input.focus(); };
+    input.addEventListener("focus",()=>{ if(input.value.trim()) runSearch(input.value.trim()); });
+    $("#mapClear",el).onclick=()=>{ input.value=""; $("#mapClear",el).hidden=true; hideResults(); clearPins(); input.focus(); };
+    $("#searchArea",el).onclick=()=>{ if(lastSearch){ $("#mapSearch",el).value=lastSearch.query; runSearch(lastSearch.query,{pins:true}); } };
     $("#chipNearby",el).onclick=showNearby;
     $("#layersBtn",el).onclick=toggleLayersMenu;
     enablePanelDrag();
