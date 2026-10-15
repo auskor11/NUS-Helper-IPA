@@ -1,1 +1,48 @@
-# NUS-Helper-IPA
+# NUS Helper IPA
+
+Native iOS build of the NUS Companion web app (`../NUS Companion/NUS Helper`), wrapped with Capacitor 8.
+
+The web app is the source of truth: `npm run sync` copies it into `www/` and adds the native patches, so this folder never holds a separate copy of the app logic.
+
+## Build the IPA
+
+```bash
+npm install
+npm run build-ipa
+```
+
+Output: `build/NUS Companion.ipa`, development-signed for team `FF395Z92C2`, bundle ID `auskor.NUS-Helper`.
+
+After changing the web app, run `npm run build-ipa` again; it re-syncs first.
+
+## Install on the iPhone
+
+With the phone connected and paired:
+
+```bash
+xcrun devicectl device install app --device "Austin's iPhone" "build/NUS Companion.ipa"
+```
+
+Or drag the IPA onto the phone in Xcode → Window → Devices and Simulators, or use Sideloadly or AltStore.
+
+Free Apple ID signing expires after **7 days**. Rebuild and reinstall to renew it. Your data lives in Firestore, so nothing is lost.
+
+## What differs from the web app
+
+| Web | iOS app | Where |
+|---|---|---|
+| Google sign-in via redirect | Native Google Sign-In → token handed to the Firebase JS SDK | `native/native-auth.js` |
+| Background Web Push (GitHub Actions) | Local notifications scheduled on the phone, same rules and wording (tasks 7d / 1d / overdue, activities 1d) | `native/native-app.js` |
+| Install-app button | Hidden | `native/native-app.js` |
+| NUS shuttle arrivals embedded from bus.hewliyang.com (the API blocks browsers) | Native rows: the API is called natively via CapacitorHttp | `app/places.js` in the web app |
+| Firebase config from `/__/firebase/init.json` | Embedded in `firebase-config.js` at sync time | `scripts/sync-web.mjs` |
+
+Not bundled: `sw.js` (service workers don't run in iOS apps).
+
+## Files
+
+- `scripts/sync-web.mjs` copies the web app into `www/` and applies the patches.
+- `scripts/build-ipa.sh` archives the app and exports the IPA.
+- `native/` holds the JS loaded only in the iOS app.
+- `resources/` holds the SVG sources for the app icon and splash screen.
+- `ios/App/App/GoogleService-Info.plist` is the Firebase iOS app config (`firebase apps:sdkconfig IOS 1:685608964768:ios:1f8d597eef1abe93b72fc5`).

@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0b0d12">
+<title>Login · NUS Companion</title>
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="icon" href="/assets/icon.svg">
+<link rel="stylesheet" href="/styles.css?v=200">
+</head>
+<body class="auth-page" data-page="login">
+<main class="auth-wrap">
+  <section class="auth-card">
+    <div class="auth-logo">N</div>
+    <div class="eyebrow">NUS COMPANION V24</div>
+    <h1>Welcome back.</h1>
+    <p class="subtle auth-intro">Sign in to keep your modules, timetable, activities and tasks synced across your devices.</p>
+
+    <div id="authError" class="error-box hidden"></div>
+
+    <button id="googleBtn" class="google-btn" type="button">
+      <span class="google-icon">G</span>
+      Continue with Google
+    </button>
+
+    <div class="auth-divider"><span>or</span></div>
+
+    <form id="emailForm" class="form">
+      <label>Email
+        <input id="email" type="email" autocomplete="email" placeholder="you@example.com" required>
+      </label>
+      <label>Password
+        <input id="password" type="password" autocomplete="current-password" placeholder="At least 6 characters" minlength="6" required>
+      </label>
+      <button id="emailLoginBtn" class="primary full-btn" type="submit">Log in with email</button>
+      <button id="registerBtn" class="secondary full-btn" type="button">Create account</button>
+    </form>
+
+    <p class="auth-note">Your account is managed by Firebase Authentication. NUS Companion does not see or store your Google password.</p>
+  </section>
+</main>
+<script src="/firebase-config.js"></script>
+<script src="/firebase.js"></script>
+<script src="/native/native-auth.js"></script>
+<script src="/login.js"></script>
+</body>
+</html>

@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0b0d12">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="icon" href="/assets/icon.svg">
+<link rel="apple-touch-icon" href="/assets/icon.svg">
+<title>NUS Companion</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="">
+<link rel="stylesheet" href="/styles.css?v=200">
+</head>
+<body>
+<div id="splash" class="splash"><div class="brand-mark big">N</div><span class="spinner"></span><p id="splashText">Loading your schedule…</p></div>
+<script>try{var t=localStorage.getItem("nus_theme");if(t?t==="light":matchMedia("(prefers-color-scheme: light)").matches)document.body.classList.add("light")}catch(e){}</script>
+<script src="/firebase-config.js"></script>
+<script src="/firebase.js"></script>
+<script src="/native/native-auth.js"></script>
+<script src="/push-config.js"></script>
+<script src="/shared.js"></script>
+<script src="/native/native-app.js"></script>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
+<script src="/app/core.js?v=200"></script>
+<script src="/app/places.js?v=200"></script>
+<script src="/app/tasks.js?v=200"></script>
+<script src="/app/schedule.js?v=200"></script>
+<script src="/app/today.js?v=200"></script>
+<script src="/app/map.js?v=200"></script>
+<script src="/app/more.js?v=200"></script>
+<script>if("serviceWorker" in navigator && !window.Capacitor) navigator.serviceWorker.register("/sw.js",{updateViaCache:"none"}).catch(()=>{});</script>
+</body>
+</html>
