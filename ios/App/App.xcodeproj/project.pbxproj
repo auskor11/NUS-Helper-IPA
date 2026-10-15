@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		11CC56CE9595DCBDE86226AF /* AppGroup.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4981EAAD03DC122532B0A02E /* AppGroup.swift */; };
 		201D49E63E2D2C782113C2CF /* AppIntents.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 7BC7485EB947714E1447DA68 /* AppIntents.framework */; };
 		242094462CBCF3121D09A8B2 /* TripActivityPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = D680DE5AB70A987247E21B09 /* TripActivityPlugin.swift */; };
 		2FAD9763203C412B000D30F8 /* config.xml in Resources */ = {isa = PBXBuildFile; fileRef = 2FAD9762203C412B000D30F8 /* config.xml */; };
@@ -35,6 +36,7 @@
 		C1C6CF24AECE565014F9EE04 /* TripAttributes.swift in Sources */ = {isa = PBXBuildFile; fileRef = 11C8C628C4FE3E1916DA5E39 /* TripAttributes.swift */; };
 		C698BC4CAEF4495EA9A2125A /* Foundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 6028CE9ACB8FFA1946B50F25 /* Foundation.framework */; };
 		F043B7FCBC2F55507F40E6BB /* WidgetKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 5DC33E6C762CF6B1850FAA95 /* WidgetKit.framework */; };
+		F3CBAE46F669F8DB26DA9A4C /* AppGroup.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4981EAAD03DC122532B0A02E /* AppGroup.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -67,6 +69,7 @@
 		35C3EFEF2CD1F4EA6A8AE68E /* WidgetBridgePlugin.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = WidgetBridgePlugin.swift; sourceTree = "<group>"; };
 		436A6A7A4AA1854A0E097618 /* NextClassWidget.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = NextClassWidget.swift; sourceTree = "<group>"; };
 		45E0DF14F2E97F54E7DF1F68 /* App.entitlements */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.entitlements; path = App.entitlements; sourceTree = "<group>"; };
+		4981EAAD03DC122532B0A02E /* AppGroup.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = AppGroup.swift; sourceTree = "<group>"; };
 		4A26491CCC5099FBCDBDA6E6 /* UpNextWidget.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = UpNextWidget.swift; sourceTree = "<group>"; };
 		4FB657E9C78BEBA3D9541B5B /* WidgetShared.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = WidgetShared.swift; sourceTree = "<group>"; };
 		50379B222058CBB4000EE86E /* capacitor.config.json */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.json; path = capacitor.config.json; sourceTree = "<group>"; };
@@ -151,6 +154,7 @@
 				D680DE5AB70A987247E21B09 /* TripActivityPlugin.swift */,
 				35C3EFEF2CD1F4EA6A8AE68E /* WidgetBridgePlugin.swift */,
 				B30FAA698BB9FE9A077DB4FF /* PlaceSearchPlugin.swift */,
+				4981EAAD03DC122532B0A02E /* AppGroup.swift */,
 			);
 			name = Trip;
 			path = Trip;
@@ -325,6 +329,7 @@
 				242094462CBCF3121D09A8B2 /* TripActivityPlugin.swift in Sources */,
 				30A6C34BE94323978650D9B8 /* WidgetBridgePlugin.swift in Sources */,
 				7B1E67434B60F68B02CD63D9 /* PlaceSearchPlugin.swift in Sources */,
+				F3CBAE46F669F8DB26DA9A4C /* AppGroup.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -338,6 +343,7 @@
 				7C4CD59F3EAC5EDF1DFA28A6 /* NextClassWidget.swift in Sources */,
 				544AFE3434E74E30D2E03D2D /* UpNextWidget.swift in Sources */,
 				821EE52C765C5F612A45838D /* BusStopWidget.swift in Sources */,
+				11CC56CE9595DCBDE86226AF /* AppGroup.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

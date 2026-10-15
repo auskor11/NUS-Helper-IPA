@@ -17,6 +17,19 @@ After changing the web app, run `npm run build-ipa` again; it re-syncs first.
 
 ## Install on the iPhone
 
+### With AltStore
+
+1. Install AltServer on the Mac (altstore.io), connect the phone, and in Finder tick **Show this iPhone when on Wi-Fi**.
+2. AltServer menu → **Install AltStore** → the iPhone, and sign in with your Apple ID.
+3. On the phone: trust your Apple ID under Settings → General → VPN & Device Management, and turn on Settings → Privacy & Security → Developer Mode.
+4. AirDrop `build/NUS Companion.ipa` to the phone, save it to Files, then AltStore → My Apps → **+** → pick the IPA.
+
+AltStore refreshes the app every 7 days while the phone and Mac share Wi-Fi with AltServer running. The app uses 2 of the free account's 10 weekly app IDs (app + widget extension).
+
+AltStore renames the bundle ID and App Group (it appends your team ID). The app and widgets find the renamed group at launch (`ios/App/App/Trip/AppGroup.swift`), so widgets keep working.
+
+### With a cable
+
 With the phone connected and paired:
 
 ```bash
@@ -80,3 +93,5 @@ The app writes the schedule, NUS stops and shuttle routes to the `group.auskor.N
 
 - `backup/2026-10-15-before-update`: this repo before the app was added (README only).
 - `backup/2026-10-15-before-in-app-navigation`: the app before Citymapper was replaced with in-app directions.
+- `backup/2026-10-15-widgets-and-map-search` (tag `v1.0-2026-10-15`): widgets and the OpenStreetMap search.
+- `backup/2026-10-16-before-altstore` (tag `v1.1-2026-10-16`): Apple Maps search, before the AltStore changes.

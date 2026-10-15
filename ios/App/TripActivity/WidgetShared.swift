@@ -7,7 +7,6 @@ import WidgetKit
 // WidgetData into the shared App Group (see WidgetBridgePlugin.swift and
 // native/native-app.js); widgets only read it, plus live bus times.
 
-let appGroup = "group.auskor.NUS-Helper"
 let widgetDataKey = "widget.v1"
 
 struct WidgetData: Codable {
@@ -37,7 +36,7 @@ struct WidgetData: Codable {
     let routes: [String: [String]]
 
     static func load() -> WidgetData? {
-        guard let json = UserDefaults(suiteName: appGroup)?.string(forKey: widgetDataKey),
+        guard let json = AppGroup.defaults?.string(forKey: widgetDataKey),
               let data = json.data(using: .utf8) else { return nil }
         return try? JSONDecoder().decode(WidgetData.self, from: data)
     }
@@ -249,7 +248,7 @@ struct StopQuery: EntityStringQuery {
 /// Singapore public bus stops (BusRouter SG), cached in the App Group.
 enum PublicStops {
     static func all() async -> [StopEntity] {
-        let dir = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: appGroup)
+        let dir = AppGroup.container
         let file = dir?.appendingPathComponent("public-stops.json")
         var data = file.flatMap { try? Data(contentsOf: $0) }
         if data == nil, let url = URL(string: "https://data.busrouter.sg/v1/stops.min.json") {

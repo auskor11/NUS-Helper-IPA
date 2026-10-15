@@ -15,7 +15,7 @@ public class WidgetBridgePlugin: CAPPlugin, CAPBridgedPlugin {
 
     @objc func update(_ call: CAPPluginCall) {
         guard let json = call.getString("data"),
-              let defaults = UserDefaults(suiteName: "group.auskor.NUS-Helper") else {
+              let defaults = AppGroup.defaults else {
             call.reject("Widget data unavailable.")
             return
         }
