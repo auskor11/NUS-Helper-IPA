@@ -565,7 +565,8 @@ views.map=(()=>{
     openPanel(`<p class="kicker">${esc(placeKindLabel(p).toUpperCase())}${p.floor!=null?` · LEVEL ${esc(String(p.floor))}`:""}</p>
       <h2>${esc(p.code)}</h2>
       <p class="subtle place-address">${esc(p.name&&p.name!==p.code?p.name:"")}</p>
-      <p class="subtle">${distanceText(p).replace(/^ · /,"")}</p>
+      <p class="subtle">${[p.kind,distanceText(p).replace(/^ · /,"")].filter(Boolean).join(" · ")}</p>
+      ${p.phone||p.url?`<div class="place-links">${p.phone?`<a class="chip" href="tel:${esc(p.phone.replace(/[^+\d]/g,""))}">${icon("M22 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3.1 19.5 19.5 0 0 1-6-6A19.8 19.8 0 0 1 2.1 4.2 2 2 0 0 1 4.1 2h3a2 2 0 0 1 2 1.7c.1.9.4 1.8.7 2.7a2 2 0 0 1-.5 2.1L8 9.8a16 16 0 0 0 6 6l1.3-1.3a2 2 0 0 1 2.1-.4c.9.3 1.8.6 2.7.7a2 2 0 0 1 1.7 2z",14)}Call</a>`:""}${p.url?`<a class="chip" href="${esc(p.url)}" target="_blank" rel="noopener">${icon("M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20zM2 12h20M12 2a15 15 0 0 1 0 20M12 2a15 15 0 0 0 0 20",14)}Website</a>`:""}</div>`:""}
       <div class="place-actions">${walkButton()}<button class="btn secondary" id="savePlace">${icon(p.type==="saved"?"M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z":PLACE_ICONS.star.path,18)}${p.type==="saved"?"Edit":"Save"}</button></div>
       ${showShuttle?`<h4 class="sub-head">Nearest shuttle stop<button class="link" id="openNear">${esc(near.name)} · ${distanceLabel(near.distance)}</button></h4>
         <div id="etaNear"><div class="empty-inline"><span class="spinner sm"></span>Loading live times…</div></div>`:""}`);
@@ -643,8 +644,9 @@ views.map=(()=>{
     const input=$("#mapSearch",el);
     const local=await searchPlacesLocal(q,{limit:pins?4:6});
     if(input.value.trim()!==q) return;
-    showResults(local,[],{query:q,loading:q.length>=3});
-    if(q.length<3) return;
+    const minLen=applePlaceSearch?2:3;
+    showResults(local,[],{query:q,loading:q.length>=minLen});
+    if(q.length<minLen) return;
     const c=map.getCenter();
     const nearby=await searchPlacesInArea(q,viewBounds(),{lat:c.lat,lng:c.lng});
     if(input.value.trim()!==q) return;
@@ -734,9 +736,12 @@ views.map=(()=>{
       $("#mapClear",el).hidden=!q;
       clearTimeout(searchTimer);
       if(!q){ hideResults(); return; }
+      // A new search replaces the open place card, as in Google Maps.
+      if(!$("#mapPanel",el).hidden && !el.classList.contains("routing")) closePanel();
       // Local results right away; the area search waits for a pause in typing.
-      searchPlacesLocal(q,{limit:6}).then(rows=>{ if(input.value.trim()===q) showResults(rows,[],{query:q,loading:q.length>=3}); });
-      searchTimer=setTimeout(()=>runSearch(q),650);
+      searchPlacesLocal(q,{limit:6}).then(rows=>{ if(input.value.trim()===q) showResults(rows,[],{query:q,loading:q.length>=(applePlaceSearch?2:3)}); });
+      // Apple Maps search is quick; OpenStreetMap allows one request a second.
+      searchTimer=setTimeout(()=>runSearch(q),applePlaceSearch?300:650);
     });
     input.addEventListener("keydown",e=>{
       if(e.key!=="Enter") return;

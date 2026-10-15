@@ -34,6 +34,7 @@ Free Apple ID signing expires after **7 days**. Rebuild and reinstall to renew i
 | Google sign-in via redirect | Native Google Sign-In → token handed to the Firebase JS SDK | `native/native-auth.js` |
 | Background Web Push (GitHub Actions) | Local notifications scheduled on the phone, same rules and wording (tasks 7d / 1d / overdue, activities 1d) | `native/native-app.js` |
 | Install-app button | Hidden | `native/native-app.js` |
+| Map search: OpenStreetMap (Nominatim) | Apple Maps search (MKLocalSearch) around the visible map: business listings, typo-tolerant, with category, phone and website. Falls back to OpenStreetMap | `ios/App/App/Trip/PlaceSearchPlugin.swift`, `app/places.js` in the web app |
 | Directions | Same: Transit (bus + MRT via Transitous), Walk, Cycle and Drive, all drawn on the in-app map | `app/map.js` in the web app |
 | NUS shuttle arrivals embedded from bus.hewliyang.com (the API blocks browsers) | Native rows: the API is called natively via CapacitorHttp | `app/places.js` in the web app |
 | Firebase config from `/__/firebase/init.json` | Embedded in `firebase-config.js` at sync time | `scripts/sync-web.mjs` |
@@ -48,7 +49,7 @@ Not bundled: `sw.js` (service workers don't run in iOS apps).
 - Walk, cycle and drive: distance and time left.
 - The trip ends on arrival, from **End trip**, or after 2 hours.
 
-Code: `ios/App/App/Trip/` (tracker + Capacitor plugin) and `ios/App/TripActivity/` (widget extension UI). `TripAttributes.swift` is compiled into both targets. The plugin is registered through `packageClassList`; `scripts/patch-ios.mjs` adds it after every `cap sync`. Requires iOS 16.2+.
+Code: `ios/App/App/Trip/` (tracker + Capacitor plugin; the folder also holds the widget and place search plugins) and `ios/App/TripActivity/` (widget extension UI). `TripAttributes.swift` is compiled into both targets. The plugin is registered through `packageClassList`; `scripts/patch-ios.mjs` adds it after every `cap sync`. Requires iOS 16.2+.
 
 To test a ride in the simulator, move the simulated location along stops:
 

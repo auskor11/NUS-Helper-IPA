@@ -489,9 +489,35 @@ const KIND_LABELS={fast_food:"Fast food",restaurant:"Restaurant",cafe:"Café",fo
 const areaSearchCache=new Map();
 let lastNominatimAt=0;
 
+// In the iOS app, Apple Maps search (PlaceSearchPlugin.swift): real business
+// listings with typo-tolerant matching, biased to the visible map.
+const applePlaceSearch=isNativeApp()?window.Capacitor?.Plugins?.PlaceSearch||null:null;
+
+async function searchPlacesApple(q,bounds,center,min){
+  const region=f=>({lat:(bounds.n+bounds.s)/2,lng:(bounds.e+bounds.w)/2,latDelta:(bounds.n-bounds.s)*f,lngDelta:(bounds.e-bounds.w)*f});
+  const seen=new Set(), out=[];
+  const add=places=>{
+    for(const x of places||[]){
+      const key=`${String(x.name).toLowerCase()}|${Math.round(x.lat*2000)}|${Math.round(x.lng*2000)}`;
+      if(seen.has(key)) continue;
+      seen.add(key);
+      out.push({type:"place",code:x.name,name:[x.address,/^\d+$/.test(x.area)?"":x.area].filter(Boolean).join(", ")||x.postcode||"Singapore",
+        kind:x.category||"",lat:x.lat,lng:x.lng,phone:x.phone||"",url:x.url||"",distance:distanceM(center,{lat:x.lat,lng:x.lng})});
+    }
+  };
+  // The view first; if that's thin, a wider area, like "search this area".
+  add((await applePlaceSearch.search({query:q,...region(1)})).places);
+  if(out.length<min) add((await applePlaceSearch.search({query:q,...region(6)})).places);
+  return out.sort((a,b)=>a.distance-b.distance);
+}
+
 async function searchPlacesInArea(query,bounds,center,{min=8}={}){
   const q=String(query||"").trim();
   if(q.length<2) return [];
+  if(applePlaceSearch){
+    try{ return await searchPlacesApple(q,bounds,center,min); }
+    catch(err){ console.warn("Apple Maps search failed",err); }
+  }
   // Nominatim asks for at most one request a second.
   const run=async(viewbox,bounded)=>{
     const key=`${q.toLowerCase()}|${viewbox}|${bounded}`;

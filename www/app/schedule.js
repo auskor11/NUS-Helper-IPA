@@ -227,11 +227,12 @@ views.schedule=(()=>{
     $$("[data-open]",el).forEach(b=>b.onclick=()=>openScheduleItem(b.dataset.open,b.dataset.id));
     $("#addSchedule",el).onclick=()=>openAddChooser(isoDate(selected));
 
-    // Start the week grid scrolled to the current time.
+    // Start the week grid at 8am, with today's column (or Monday) first.
     const wrap=$(".week-wrap",el);
     if(wrap){
-      const h=Math.max(0,new Date().getHours()-HOUR_START-1);
-      wrap.scrollTop=h*ROW;
+      const head=$(".week-head.today",wrap);
+      wrap.scrollTop=0;
+      wrap.scrollLeft=head?head.offsetLeft-$(".week-axis",wrap).offsetWidth:0;
     }
   }
 

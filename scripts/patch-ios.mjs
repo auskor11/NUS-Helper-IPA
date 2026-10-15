@@ -7,7 +7,7 @@ import { fileURLToPath } from "node:url";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const file = path.join(root, "ios", "App", "App", "capacitor.config.json");
-const LOCAL_PLUGINS = ["TripActivityPlugin", "WidgetBridgePlugin"];
+const LOCAL_PLUGINS = ["TripActivityPlugin", "WidgetBridgePlugin", "PlaceSearchPlugin"];
 
 const config = JSON.parse(fs.readFileSync(file, "utf8"));
 config.packageClassList = [...new Set([...(config.packageClassList || []), ...LOCAL_PLUGINS])];

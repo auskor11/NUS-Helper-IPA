@@ -25,6 +25,7 @@
 		6DC87D051DDD1F4060B45CA7 /* ActivityKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = A249AA464000FB443EFE4B21 /* ActivityKit.framework */; };
 		761DB3A010585C9AF2F6D659 /* silence.caf in Resources */ = {isa = PBXBuildFile; fileRef = 9A5692ECA7EFDDBC7E5C70AB /* silence.caf */; };
 		79D4546D04A5D4E34A766D57 /* TripTracker.swift in Sources */ = {isa = PBXBuildFile; fileRef = AF5901F8ED27FA7278B6B42E /* TripTracker.swift */; };
+		7B1E67434B60F68B02CD63D9 /* PlaceSearchPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = B30FAA698BB9FE9A077DB4FF /* PlaceSearchPlugin.swift */; };
 		7C4CD59F3EAC5EDF1DFA28A6 /* NextClassWidget.swift in Sources */ = {isa = PBXBuildFile; fileRef = 436A6A7A4AA1854A0E097618 /* NextClassWidget.swift */; };
 		821EE52C765C5F612A45838D /* BusStopWidget.swift in Sources */ = {isa = PBXBuildFile; fileRef = EBA87F302067901D8BEC4F78 /* BusStopWidget.swift */; };
 		8AF9DD4B3B8A3B45ACDA36FE /* WidgetShared.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4FB657E9C78BEBA3D9541B5B /* WidgetShared.swift */; };
@@ -87,6 +88,7 @@
 		A1B2C3D42F00000100000002 /* GoogleService-Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = "GoogleService-Info.plist"; sourceTree = "<group>"; };
 		A249AA464000FB443EFE4B21 /* ActivityKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = ActivityKit.framework; path = Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS26.0.sdk/System/Library/Frameworks/ActivityKit.framework; sourceTree = DEVELOPER_DIR; };
 		AF5901F8ED27FA7278B6B42E /* TripTracker.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = TripTracker.swift; sourceTree = "<group>"; };
+		B30FAA698BB9FE9A077DB4FF /* PlaceSearchPlugin.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = PlaceSearchPlugin.swift; sourceTree = "<group>"; };
 		D2C6D5283677B0ABA0539648 /* Info.plist */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		D680DE5AB70A987247E21B09 /* TripActivityPlugin.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = TripActivityPlugin.swift; sourceTree = "<group>"; };
 		E21A11DE7DCF31B6ECE482F5 /* TripActivity.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = TripActivity.appex; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -148,6 +150,7 @@
 				AF5901F8ED27FA7278B6B42E /* TripTracker.swift */,
 				D680DE5AB70A987247E21B09 /* TripActivityPlugin.swift */,
 				35C3EFEF2CD1F4EA6A8AE68E /* WidgetBridgePlugin.swift */,
+				B30FAA698BB9FE9A077DB4FF /* PlaceSearchPlugin.swift */,
 			);
 			name = Trip;
 			path = Trip;
@@ -321,6 +324,7 @@
 				79D4546D04A5D4E34A766D57 /* TripTracker.swift in Sources */,
 				242094462CBCF3121D09A8B2 /* TripActivityPlugin.swift in Sources */,
 				30A6C34BE94323978650D9B8 /* WidgetBridgePlugin.swift in Sources */,
+				7B1E67434B60F68B02CD63D9 /* PlaceSearchPlugin.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
