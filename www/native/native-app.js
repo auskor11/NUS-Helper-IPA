@@ -101,6 +101,8 @@
   window.addEventListener("nus-cloud-state-applied",queueReschedule);
   document.addEventListener("visibilitychange",()=>{ if(!document.hidden) queueReschedule(); });
 
+  refreshPermission();
+
   LocalNotifications.addListener("localNotificationActionPerformed",e=>{
     const href=e?.notification?.extra?.href;
     if(href && location.pathname!==href) location.href=href;

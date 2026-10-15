@@ -6,7 +6,7 @@
 views.map=(()=>{
   let el=null, map=null, ready=false;
   let nusMarkers=new Map(), publicLayer=null, pinMarker=null, meMarker=null, watchId=null;
-  let selected=null, refreshTimer=null, searchTimer=null, pendingParams=null;
+  let selected=null, refreshTimer=null, searchTimer=null, pendingParams=null, routeLayer=null;
 
   /* ---------- Markers ---------- */
 
@@ -73,8 +73,13 @@ views.map=(()=>{
     if(!panel.hidden && !wide) map.panBy([0,panel.offsetHeight/2],{animate:false});
   }
 
+  function clearRoute(){
+    if(routeLayer){ routeLayer.remove(); routeLayer=null; }
+  }
+
   function closePanel(){
     clearInterval(refreshTimer);
+    clearRoute();
     $("#mapPanel",el).hidden=true;
     el.classList.remove("panel-open");
     if(selected?.type==="nus") nusMarkers.get(selected.code)?.setIcon(nusIcon());
@@ -86,18 +91,85 @@ views.map=(()=>{
     return lastPosition?` · ${distanceLabel(distanceM(lastPosition,p))} away`:"";
   }
 
-  function directionsButtons(p){
-    const dest=`${p.lat},${p.lng}`;
-    const name=encodeURIComponent(p.name&&p.name!==p.code?`${p.code}, ${p.name}`:p.code);
-    return `<div class="dir-row">
-      <a class="btn primary" target="_blank" rel="noopener" href="https://www.google.com/maps/dir/?api=1&destination=${dest}&travelmode=transit">${icon("M3 11l19-9-9 19-2-8-8-2z",16)}Directions</a>
-      <a class="btn secondary" target="_blank" rel="noopener" href="https://maps.apple.com/?daddr=${dest}&q=${name}&dirflg=w">Apple Maps</a>
-      <a class="btn secondary" target="_blank" rel="noopener" href="https://citymapper.com/directions?endcoord=${dest}&endname=${name}">Citymapper</a>
-    </div>`;
+  function walkButton(){
+    return `<button class="btn primary full" id="walkHere">${icon("M13 4a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3zM9.5 22l2-7 2.5 2v5M8 12l1-4 4-1 3 4 3 1M10 8l-2 6",18)}Directions</button>`;
+  }
+
+  const TURN_ICONS={left:"M9 14 4 9l5-5M4 9h10a6 6 0 0 1 6 6v5",right:"M15 14l5-5-5-5M20 9H10a6 6 0 0 0-6 6v5",straight:"M12 19V5M5 12l7-7 7 7"};
+  function stepIcon(st){
+    if(st.type==="arrive") return icon("M12 21s-7-6.2-7-11.5a7 7 0 0 1 14 0C19 14.8 12 21 12 21z",16);
+    const dir=/left/.test(st.modifier)?"left":/right/.test(st.modifier)?"right":"straight";
+    return icon(TURN_ICONS[dir],16);
+  }
+
+  // Walking directions drawn on this map, plus a shuttle option when one helps.
+  async function showRoute(dest){
+    clearInterval(refreshTimer);
+    clearRoute();
+    const back=()=>dest.type==="nus"||dest.type==="public"?selectStop(dest):selectPlace(dest);
+    const title=dest.type==="public"?dest.name:dest.type==="nus"?dest.name:dest.code;
+    openPanel(`<p class="kicker">WALKING DIRECTIONS</p><h2>${esc(title)}</h2>
+      <div id="routeBody"><div class="empty-inline"><span class="spinner sm"></span>Finding the best walking route…</div></div>`);
+    let from;
+    try{ from=await getPosition({fresh:true}); startLocation(); }
+    catch(err){
+      $("#routeBody",el).innerHTML=`<div class="empty-inline">${esc(err.message)} Directions start from where you are, so turn on location access for NUS Companion.</div><button class="btn secondary full" id="routeBack">Back</button>`;
+      $("#routeBack",el).onclick=back;
+      return;
+    }
+    let route;
+    try{ route=await loadWalkingRoute(from,dest); }
+    catch(err){
+      $("#routeBody",el).innerHTML=`<div class="empty-inline">Couldn't get a walking route right now. Check your connection and try again.</div><button class="btn secondary full" id="routeBack">Back</button>`;
+      $("#routeBack",el).onclick=back;
+      return;
+    }
+    if(selected!==dest) return;
+
+    routeLayer=L.layerGroup([
+      L.polyline(route.path,{color:"#ffffff",weight:9,opacity:.9}),
+      L.polyline(route.path,{color:"#6d5df5",weight:5,opacity:1}),
+      L.polyline([[from.lat,from.lng],route.path[0]],{color:"#6d5df5",weight:3,dashArray:"4 6"})
+    ]).addTo(map);
+
+    const mins=walkMinutes(route.duration);
+    const arrive=new Date(Date.now()+route.duration*1000).toLocaleTimeString("en-SG",{hour:"numeric",minute:"2-digit"});
+    $("#routeBody",el).innerHTML=`
+      <div class="route-summary"><b>${mins} min</b><span>${distanceLabel(route.distance)} walk · arrive ${arrive}</span></div>
+      <div id="shuttleOpt"></div>
+      <details class="route-steps"><summary>Step-by-step (${route.steps.length})</summary>
+        <ol>${route.steps.map(st=>`<li>${stepIcon(st)}<span>${esc(st.text)}${st.type!=="arrive"?`<small>${distanceLabel(st.distance)}</small>`:""}</span></li>`).join("")}</ol>
+      </details>
+      <div class="two"><button class="btn secondary" id="routeRecenter">Show my location</button><button class="btn danger-soft" id="routeEnd">End</button></div>
+      ${route.distance>3000?`<p class="small-help">That's a long walk. For buses and the MRT, <a href="https://maps.apple.com/?daddr=${dest.lat},${dest.lng}&dirflg=r" target="_blank" rel="noopener">open public transport directions</a>.</p>`:""}`;
+    // Fit the whole route into the map area above the panel.
+    const fitRoute=()=>{
+      const wide=matchMedia("(min-width:900px)").matches;
+      const panelH=$("#mapPanel",el).offsetHeight;
+      map.fitBounds(L.latLngBounds([[from.lat,from.lng],...route.path]),{
+        paddingTopLeft:[wide?460:30,150], paddingBottomRight:[30,wide?40:panelH+30]
+      });
+    };
+    fitRoute();
+    $("#routeEnd",el).onclick=back;
+    $("#routeRecenter",el).onclick=()=>{ if(lastPosition) map.setView([lastPosition.lat,lastPosition.lng],18,{animate:true}); };
+
+    const opt=await shuttleOption(from,dest);
+    if(opt && selected===dest && $("#shuttleOpt",el)){
+      $("#shuttleOpt",el).innerHTML=`<div class="shuttle-opt">
+        <p class="kicker">OR TAKE THE SHUTTLE</p>
+        <p>Walk ${distanceLabel(opt.from.distance)} to <b>${esc(opt.from.name)}</b>, ride to <b>${esc(opt.to.name)}</b>, then walk ${distanceLabel(opt.to.distance)}.</p>
+        <div class="eta-list">${opt.services.slice(0,3).map(r=>`<div class="eta-row"><span class="route-badge nus r-${esc(String(r.service).replace(/[^A-Za-z0-9]/g,""))}">${esc(r.service)}</span><span class="eta-next">${r.next==null?"–":r.next<=0?"Arriving":`<b>${r.next}</b> min`}</span><span class="eta-then">at ${esc(opt.from.name)}</span></div>`).join("")}</div>
+        <button class="link" id="optStop">See ${esc(opt.from.name)} stop</button>
+      </div>`;
+      $("#optStop",el).onclick=()=>selectStop(opt.from);
+      fitRoute();
+    }
   }
 
   async function selectStop(stop){
     clearInterval(refreshTimer);
+    clearRoute();
     if(selected?.type==="nus") nusMarkers.get(selected.code)?.setIcon(nusIcon());
     if(pinMarker){ pinMarker.remove(); pinMarker=null; }
     selected=stop;
@@ -117,7 +189,9 @@ views.map=(()=>{
       <p class="subtle">${[stop.type==="public"&&stop.road?esc(stop.road):"",distanceText(stop).replace(/^ · /,"")].filter(Boolean).join(" · ")}</p>
       <div id="etaMain"><div class="empty-inline"><span class="spinner sm"></span>Loading live times…</div></div>
       ${twin?`<h4 class="sub-head">${twin.type==="nus"?"NUS shuttles here":"Public buses here"}<small>${esc(twin.type==="nus"?twin.name:`${twin.name} · ${twin.code}`)}</small></h4><div id="etaTwin"></div>`:""}
-      <p class="updated" id="etaUpdated"></p>`);
+      <p class="updated" id="etaUpdated"></p>
+      ${walkButton()}`);
+    $("#walkHere",el).onclick=()=>showRoute(stop);
 
     focusOn(stop,Math.max(map.getZoom(),17));
     const load=async()=>{
@@ -134,6 +208,7 @@ views.map=(()=>{
 
   async function selectPlace(p){
     clearInterval(refreshTimer);
+    clearRoute();
     if(selected?.type==="nus") nusMarkers.get(selected.code)?.setIcon(nusIcon());
     if(pinMarker) pinMarker.remove();
     selected=p;
@@ -145,9 +220,10 @@ views.map=(()=>{
       <h2>${esc(p.code)}</h2>
       ${p.name&&p.name!==p.code?`<p class="subtle">${esc(p.name)}</p>`:""}
       <p class="subtle">${distanceText(p).replace(/^ · /,"")}</p>
-      ${directionsButtons(p)}
+      ${walkButton()}
       ${showShuttle?`<h4 class="sub-head">Nearest shuttle stop<button class="link" id="openNear">${esc(near.name)} · ${distanceLabel(near.distance)}</button></h4>
         <div id="etaNear"><div class="empty-inline"><span class="spinner sm"></span>Loading live times…</div></div>`:""}`);
+    $("#walkHere",el).onclick=()=>showRoute(p);
     focusOn(p,18);
     if(showShuttle){
       $("#openNear",el).onclick=()=>selectStop(near);

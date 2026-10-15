@@ -317,6 +317,20 @@ select.input{background-image:linear-gradient(45deg,transparent 50%,var(--muted)
 .leaflet-container{font-family:inherit}
 .leaflet-control-attribution{font-size:9px!important}
 
+/* Walking directions */
+.route-summary{display:flex;align-items:baseline;gap:10px;margin:6px 0 12px}
+.route-summary b{font-size:28px;font-weight:800}
+.route-summary span{color:var(--muted);font-size:14px}
+.shuttle-opt{background:var(--surface2);border:1px solid var(--line);border-radius:14px;padding:12px 14px;margin-bottom:12px}
+.shuttle-opt p{margin:0 0 8px;font-size:14px}
+.shuttle-opt .kicker{margin-bottom:4px}
+.route-steps{margin:0 0 12px;border:1px solid var(--line);border-radius:14px;padding:0 14px}
+.route-steps summary{padding:12px 0;font-weight:600;cursor:pointer;color:var(--accent)}
+.route-steps ol{list-style:none;margin:0;padding:0 0 8px}
+.route-steps li{display:flex;gap:12px;align-items:flex-start;padding:9px 0;border-top:1px solid var(--line);font-size:14px}
+.route-steps li svg{color:var(--accent);margin-top:2px}
+.route-steps small{display:block;color:var(--muted);font-size:12px}
+
 /* ---------- More ---------- */
 .account-card{display:flex;align-items:center;gap:14px}
 .account-card b{display:block;font-size:17px}

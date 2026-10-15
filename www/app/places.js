@@ -139,6 +139,52 @@ function getPosition({fresh=false}={}){
   });
 }
 
+/* ---------- Walking directions ---------- */
+
+// Walking route from OpenStreetMap's foot router (routing.openstreetmap.de).
+// Returns {distance (m), duration (s), path [[lat,lng]...], steps [{text, distance}]}.
+async function loadWalkingRoute(from,to){
+  const url=`https://routing.openstreetmap.de/routed-foot/route/v1/foot/${from.lng},${from.lat};${to.lng},${to.lat}?overview=full&geometries=geojson&steps=true`;
+  const data=await getJSON(url);
+  const r=data?.routes?.[0];
+  if(data?.code!=="Ok" || !r) throw new Error("No walking route found.");
+  const steps=(r.legs?.[0]?.steps||[])
+    .filter(s=>s.maneuver?.type==="arrive" || s.distance>=5)
+    .map(s=>({text:stepText(s),distance:s.distance,type:s.maneuver?.type,modifier:s.maneuver?.modifier||""}));
+  return {distance:r.distance,duration:r.duration,path:r.geometry.coordinates.map(([lng,lat])=>[lat,lng]),steps};
+}
+
+function stepText(s){
+  const m=s.maneuver||{}, mod=m.modifier||"", road=s.name||"";
+  const onto=road?` onto ${road}`:"", on=road?` on ${road}`:"";
+  const compass=["north","northeast","east","southeast","south","southwest","west","northwest"][Math.round((m.bearing_after||0)/45)%8];
+  switch(m.type){
+    case "depart": return `Head ${compass}${on}`;
+    case "arrive": return "Arrive at your destination";
+    case "continue": case "new name": return mod&&mod!=="straight"?`Keep ${mod}${on}`:`Continue${on}`;
+    case "roundabout": case "rotary": return `Go around the roundabout${onto}`;
+    case "fork": return `Keep ${mod||"straight"} at the fork${onto}`;
+    default: return mod==="straight"?`Go straight${on}`:mod?`Turn ${mod}${onto}`:`Continue${on}`;
+  }
+}
+
+function walkMinutes(seconds){ return Math.max(1,Math.round(seconds/60)); }
+
+// A shuttle ride between the stops nearest to each end, if one helps.
+// Services that call at both stops connect them; times come from live data.
+async function shuttleOption(from,to){
+  const [a]=nearestNusStops(from,1), [b]=nearestNusStops(to,1);
+  if(!a||!b||a.code===b.code) return null;
+  const total=distanceM(from,to);
+  if(total<500 || a.distance+b.distance>total*0.7) return null;
+  try{
+    const [atA,atB]=await Promise.all([loadShuttleArrivals(a.code),loadShuttleArrivals(b.code)]);
+    const atBNames=new Set(atB.map(x=>x.service));
+    const services=atA.filter(x=>atBNames.has(x.service));
+    return services.length ? {from:a,to:b,services} : null;
+  }catch{ return null; }
+}
+
 /* ---------- Venues ---------- */
 
 let venueIndexPromise=null;
