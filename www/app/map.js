@@ -5,7 +5,7 @@
 
 views.map=(()=>{
   let el=null, map=null, ready=false;
-  let nusMarkers=new Map(), nusLayer=null, publicLayer=null, pinMarker=null, meMarker=null, watchId=null;
+  let nusMarkers=new Map(), nusLayer=null, publicLayer=null, savedLayer=null, pinMarker=null, meMarker=null, watchId=null;
   let selected=null, refreshTimer=null, searchTimer=null, pendingParams=null, routeLayer=null;
 
   // Dynamic Island / lock screen trip tracking (iOS app only).
@@ -17,7 +17,7 @@ views.map=(()=>{
   /* ---------- Markers ---------- */
 
   const nusIcon=(on=false)=>L.divIcon({className:"",html:`<div class="mk-nus ${on?"on":""}">${icon("M8 6v6M16 6v6M2 12h20M7 18h.01M17 18h.01M6 3h12a3 3 0 0 1 3 3v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a3 3 0 0 1 3-3z",14)}</div>`,iconSize:[28,28],iconAnchor:[14,14]});
-  const publicIcon=()=>L.divIcon({className:"",html:`<div class="mk-public"></div>`,iconSize:[14,14],iconAnchor:[7,7]});
+  const publicIcon=()=>L.divIcon({className:"",html:`<div class="mk-public">${icon("M8 6v6M16 6v6M2 12h20M7 18h.01M17 18h.01M6 3h12a3 3 0 0 1 3 3v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a3 3 0 0 1 3-3z",12)}</div>`,iconSize:[22,22],iconAnchor:[11,11]});
   const pinIcon=()=>L.divIcon({className:"",html:`<div class="mk-pin"></div>`,iconSize:[30,40],iconAnchor:[15,38]});
   const meIcon=()=>L.divIcon({className:"",html:`<div class="mk-me"><span></span></div>`,iconSize:[22,22],iconAnchor:[11,11]});
 
@@ -29,7 +29,29 @@ views.map=(()=>{
     }).addTo(map);
     publicLayer=L.layerGroup();
     nusLayer=L.layerGroup();
+    savedLayer=L.layerGroup().addTo(map);
     applyLayers();
+    renderSaved();
+    // Long-press (or right-click) anywhere to drop a pin you can save.
+    // iOS doesn't send contextmenu for a long press, so time touches ourselves.
+    map.on("contextmenu",e=>dropPin(e.latlng));
+    const canvas=$("#mapCanvas",el);
+    let pressTimer=null, pressStart=null;
+    canvas.addEventListener("touchstart",e=>{
+      if(e.touches.length!==1) return clearTimeout(pressTimer);
+      const t=e.touches[0];
+      pressStart={x:t.clientX,y:t.clientY};
+      clearTimeout(pressTimer);
+      pressTimer=setTimeout(()=>{
+        navigator.vibrate?.(10);
+        dropPin(map.mouseEventToLatLng({clientX:pressStart.x,clientY:pressStart.y}));
+      },550);
+    },{passive:true});
+    canvas.addEventListener("touchmove",e=>{
+      const t=e.touches[0];
+      if(pressStart && Math.hypot(t.clientX-pressStart.x,t.clientY-pressStart.y)>10) clearTimeout(pressTimer);
+    },{passive:true});
+    ["touchend","touchcancel"].forEach(ev=>canvas.addEventListener(ev,()=>clearTimeout(pressTimer),{passive:true}));
 
     for(const s of NUS_STOPS){
       const m=L.marker([s.lat,s.lng],{icon:nusIcon(),title:s.name,zIndexOffset:500}).addTo(nusLayer);
@@ -72,10 +94,76 @@ views.map=(()=>{
     });
   }
 
+  /* ---------- Saved places ---------- */
+
+  const savedIcon=p=>L.divIcon({className:"",html:`<div class="mk-saved">${icon((PLACE_ICONS[p.icon]||PLACE_ICONS.star).path,15)}</div>`,iconSize:[30,30],iconAnchor:[15,15]});
+
+  function renderSaved(){
+    if(!savedLayer) return;
+    savedLayer.clearLayers();
+    for(const p of state.places||[]){
+      L.marker([p.lat,p.lng],{icon:savedIcon(p),title:p.name,zIndexOffset:800})
+        .on("click",()=>selectPlace(savedAsPlace(p))).addTo(savedLayer);
+    }
+    const chips=$("#savedChips",el);
+    if(chips) chips.innerHTML=(state.places||[]).map(p=>`<button class="chip solid saved-chip" data-saved="${esc(p.id)}">${icon((PLACE_ICONS[p.icon]||PLACE_ICONS.star).path,14)}${esc(p.name)}</button>`).join("");
+    $$("[data-saved]",el).forEach(b=>b.onclick=()=>{ const p=state.places.find(x=>x.id===b.dataset.saved); if(p) selectPlace(savedAsPlace(p)); });
+  }
+
+  const savedAsPlace=p=>({type:"saved",id:p.id,code:p.name,name:p.address||"",icon:p.icon,lat:p.lat,lng:p.lng});
+
+  async function dropPin(latlng){
+    const p={type:"place",code:"Dropped pin",name:"Finding address…",lat:latlng.lat,lng:latlng.lng};
+    selectPlace(p);
+    const r=await reverseGeocode(latlng.lat,latlng.lng);
+    if(selected!==p) return;
+    p.code=r.title; p.name=r.address;
+    const panel=$("#mapPanel",el);
+    $("h2",panel).textContent=r.title;
+    const sub=$(".place-address",panel); if(sub) sub.textContent=r.address;
+  }
+
+  function openSaveSheet(p){
+    const existing=p.type==="saved"?state.places.find(x=>x.id===p.id):null;
+    let chosen=existing?.icon||(state.places.some(x=>x.icon==="home")?"star":"home");
+    const suggested=existing?.name||(chosen==="home"?"Home":p.code==="Dropped pin"?"":p.code);
+    openModal(`<h2>${existing?"Edit saved place":"Save place"}</h2>
+      <p class="subtle">${esc(p.name||`${p.lat.toFixed(5)}, ${p.lng.toFixed(5)}`)}</p>
+      <form class="form" id="saveForm">
+        <div class="icon-pick">${Object.entries(PLACE_ICONS).map(([k,v])=>`<button type="button" class="icon-opt ${k===chosen?"on":""}" data-icon="${k}">${icon(v.path,20)}<span>${v.label}</span></button>`).join("")}</div>
+        <input class="input big" name="name" value="${esc(suggested)}" placeholder="Name, e.g. Home" required>
+        <button class="btn primary full">${existing?"Save changes":"Save"}</button>
+        ${existing?`<button type="button" class="btn danger-soft full" id="removeSaved">Remove</button>`:""}
+      </form>`);
+    const form=$("#saveForm");
+    $$(".icon-opt",form).forEach(b=>b.onclick=()=>{
+      const prevLabel=PLACE_ICONS[chosen].label;
+      chosen=b.dataset.icon;
+      $$(".icon-opt",form).forEach(x=>x.classList.toggle("on",x===b));
+      // Fill in the name when it was still the previous icon's default.
+      if(!form.name.value.trim()||form.name.value===prevLabel) form.name.value=chosen==="star"?"":PLACE_ICONS[chosen].label;
+    });
+    form.onsubmit=e=>{
+      e.preventDefault();
+      const name=String(new FormData(form).get("name")).trim();
+      if(existing) Object.assign(existing,{name,icon:chosen});
+      else state.places=[...(state.places||[]),{id:uid(),name,icon:chosen,lat:p.lat,lng:p.lng,address:p.name&&p.name!=="Finding address…"?p.name:""}];
+      closeModal(); save(); toast(existing?"Saved":`${name} saved`);
+      renderSaved();
+      const saved=existing||state.places.at(-1);
+      selectPlace(savedAsPlace(saved));
+    };
+    $("#removeSaved")?.addEventListener("click",async()=>{
+      if(!await confirmSheet(`Remove “${existing.name}”?`,{confirm:"Remove"})) return;
+      state.places=state.places.filter(x=>x.id!==existing.id);
+      save(); renderSaved(); closePanel(); toast("Removed");
+    });
+  }
+
   // Public stops only when zoomed in, so the map stays readable.
   async function renderPublicStops(){
     publicLayer.clearLayers();
-    if(map.getZoom()<16 || !layerPrefs().public) return;
+    if(map.getZoom()<15 || !layerPrefs().public) return;
     const bounds=map.getBounds().pad(0.1);
     for(const s of await loadPublicStops()){
       if(!bounds.contains([s.lat,s.lng])) continue;
@@ -465,17 +553,19 @@ views.map=(()=>{
     if(pinMarker) pinMarker.remove();
     selected=p;
     hideResults();
-    pinMarker=L.marker([p.lat,p.lng],{icon:pinIcon(),zIndexOffset:1000}).addTo(map);
+    if(p.type!=="saved") pinMarker=L.marker([p.lat,p.lng],{icon:pinIcon(),zIndexOffset:1000}).addTo(map);
+    else pinMarker=null;
     const near=nearestNusStops(p,1)[0];
     const showShuttle=near && near.distance<800;
     openPanel(`<p class="kicker">${esc(placeKindLabel(p).toUpperCase())}${p.floor!=null?` · LEVEL ${esc(String(p.floor))}`:""}</p>
       <h2>${esc(p.code)}</h2>
-      ${p.name&&p.name!==p.code?`<p class="subtle">${esc(p.name)}</p>`:""}
+      <p class="subtle place-address">${esc(p.name&&p.name!==p.code?p.name:"")}</p>
       <p class="subtle">${distanceText(p).replace(/^ · /,"")}</p>
-      ${walkButton()}
+      <div class="place-actions">${walkButton()}<button class="btn secondary" id="savePlace">${icon(p.type==="saved"?"M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z":PLACE_ICONS.star.path,18)}${p.type==="saved"?"Edit":"Save"}</button></div>
       ${showShuttle?`<h4 class="sub-head">Nearest shuttle stop<button class="link" id="openNear">${esc(near.name)} · ${distanceLabel(near.distance)}</button></h4>
         <div id="etaNear"><div class="empty-inline"><span class="spinner sm"></span>Loading live times…</div></div>`:""}`);
     $("#walkHere",el).onclick=()=>showRoute(p);
+    $("#savePlace",el).onclick=()=>openSaveSheet(p);
     focusOn(p,18);
     if(showShuttle){
       $("#openNear",el).onclick=()=>selectStop(near);
@@ -510,7 +600,7 @@ views.map=(()=>{
     r.hidden=false;
     r.innerHTML=rows.map((p,i)=>`
       <button class="result-row" data-i="${i}">
-        <span class="result-icon t-${p.type}">${p.type==="nus"||p.type==="public"?icon("M8 6v6M16 6v6M2 12h20M6 3h12a3 3 0 0 1 3 3v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a3 3 0 0 1 3-3z",16):icon("M12 21s-7-6.2-7-11.5a7 7 0 0 1 14 0C19 14.8 12 21 12 21z",16)}</span>
+        <span class="result-icon t-${p.type}">${p.type==="saved"?icon((PLACE_ICONS[p.icon]||PLACE_ICONS.star).path,16):p.type==="nus"||p.type==="public"?icon("M8 6v6M16 6v6M2 12h20M6 3h12a3 3 0 0 1 3 3v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a3 3 0 0 1 3-3z",16):icon("M12 21s-7-6.2-7-11.5a7 7 0 0 1 14 0C19 14.8 12 21 12 21z",16)}</span>
         <span><b>${esc(p.type==="public"?p.name:p.code)}</b><small>${esc(p.type==="public"?`Bus stop ${p.code}${p.road?` · ${p.road}`:""}`:p.name!==p.code?`${placeKindLabel(p)} · ${p.name}`:placeKindLabel(p))}</small></span>
       </button>`).join("")
       +(searching?`<div class="result-status"><span class="spinner sm"></span>Searching the map…</div>`
@@ -570,6 +660,7 @@ views.map=(()=>{
         </div>
         <div id="mapResults" class="map-results" hidden></div>
         <div class="map-chips">
+          <span id="savedChips" class="saved-chips"></span>
           <button class="chip solid" id="chipNearby">${icon("M8 6v6M16 6v6M2 12h20M6 3h12a3 3 0 0 1 3 3v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a3 3 0 0 1 3-3z",14)}Shuttles near me</button>
           ${["UTOWN","CLB","KR-MRT","COM3"].map(c=>`<button class="chip solid" data-stop="${c}">${esc(NUS_STOPS.find(s=>s.code===c).name)}</button>`).join("")}
         </div>
@@ -616,6 +707,7 @@ views.map=(()=>{
   return {
     title:"Map",
     keepScroll:true,
+    refresh(){ renderSaved(); },
     mount(c){
       el=c;
       render();
@@ -627,6 +719,7 @@ views.map=(()=>{
       // Leaflet measures its container; it was hidden until now.
       setTimeout(()=>map.invalidateSize(),0);
       startLocation();
+      renderSaved();
       if(Object.keys(params).length){
         pendingParams=params;
         setTimeout(()=>{ if(pendingParams===params) applyParams(params); },50);

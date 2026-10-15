@@ -103,6 +103,60 @@
 
   refreshPermission();
 
+  /* ---------- Home screen widgets ---------- */
+  // Sends the schedule, NUS stops and shuttle routes to the widgets through
+  // the shared App Group (ios/App/App/Trip/WidgetBridgePlugin.swift).
+  const WidgetBridge=cap.Plugins.WidgetBridge;
+  let venueCoords={};
+  try{ venueCoords=JSON.parse(localStorage.getItem("nus_venue_coords")||"{}"); }catch{}
+  let twinCodes=null;
+
+  async function coordsFor(name){
+    if(!name) return null;
+    if(name in venueCoords) return venueCoords[name];
+    try{
+      const p=await resolveVenue(name);
+      venueCoords[name]=p&&p.lat!=null?{lat:p.lat,lng:p.lng}:null;
+      localStorage.setItem("nus_venue_coords",JSON.stringify(venueCoords));
+      return venueCoords[name];
+    }catch{ return null; } // offline: try again next time
+  }
+
+  async function pushWidgetData(){
+    if(!WidgetBridge || !window.nusFirebase?.user) return;
+    const hhmm=v=>minutesToInput(timeToMinutes(v));
+    const items=[];
+    for(const l of state.lessons){
+      const c=l.venueLat!=null?{lat:l.venueLat,lng:l.venueLng}:await coordsFor(l.venue);
+      items.push({kind:"lesson",title:l.module,subtitle:`${l.lessonType||"Class"}${l.classNo&&l.classNo!=="TBC"?` ${l.classNo}`:""}`,
+        day:l.day,date:null,start:hhmm(l.startTime),end:hhmm(l.endTime),venue:l.venue||"",lat:c?.lat??null,lng:c?.lng??null});
+    }
+    for(const a of state.activities){
+      const c=a.venueLat!=null?{lat:a.venueLat,lng:a.venueLng}:await coordsFor(a.venue);
+      items.push({kind:"activity",title:a.name,subtitle:a.club||"Activity",day:a.recurring?a.day:null,date:a.recurring?null:a.date,
+        start:hhmm(a.startTime),end:hhmm(a.endTime),venue:a.venue||"",lat:c?.lat??null,lng:c?.lng??null});
+    }
+    if(!twinCodes){
+      twinCodes={};
+      for(const s of NUS_STOPS){ const t=await publicStopNear(s); twinCodes[s.code]=t?.code||null; }
+    }
+    const stops=NUS_STOPS.map(s=>({code:s.code,name:s.name,lat:s.lat,lng:s.lng,publicCode:twinCodes[s.code]}));
+    await WidgetBridge.update({data:JSON.stringify({updatedAt:Date.now(),items:items.filter(i=>i.start&&i.end),stops,routes:SHUTTLE_ROUTES})});
+  }
+
+  let widgetTimer=null;
+  const queueWidgets=()=>{ clearTimeout(widgetTimer); widgetTimer=setTimeout(()=>pushWidgetData().catch(e=>console.warn("Widget update failed",e)),2000); };
+  window.addEventListener("nus-cloud-state-applied",queueWidgets);
+  window.addEventListener("nus-data-changed",queueWidgets);
+
+  // Widget taps open nuscompanion://open/<route>, e.g. open/map?stop=CLB.
+  const openDeepLink=url=>{
+    const m=String(url||"").match(/^nuscompanion:\/\/open\/(.+)$/);
+    if(m) location.hash=`#/${m[1]}`;
+  };
+  cap.Plugins.App?.addListener("appUrlOpen",e=>openDeepLink(e.url));
+  cap.Plugins.App?.getLaunchUrl().then(r=>openDeepLink(r?.url)).catch(()=>{});
+
   LocalNotifications.addListener("localNotificationActionPerformed",e=>{
     const href=e?.notification?.extra?.href;
     if(href && location.pathname!==href) location.href=href;

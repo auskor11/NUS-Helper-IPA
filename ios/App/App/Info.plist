@@ -30,6 +30,14 @@
 				<string>com.googleusercontent.apps.685608964768-vrbfc3c33dlrkjkdk2pmbbkiang6j30k</string>
 			</array>
 		</dict>
+		<dict>
+			<key>CFBundleURLName</key>
+			<string>auskor.NUS-Helper</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>nuscompanion</string>
+			</array>
+		</dict>
 	</array>
 	<key>CFBundleVersion</key>
 	<string>$(CURRENT_PROJECT_VERSION)</string>

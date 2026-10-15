@@ -7,9 +7,11 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		201D49E63E2D2C782113C2CF /* AppIntents.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 7BC7485EB947714E1447DA68 /* AppIntents.framework */; };
 		242094462CBCF3121D09A8B2 /* TripActivityPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = D680DE5AB70A987247E21B09 /* TripActivityPlugin.swift */; };
 		2FAD9763203C412B000D30F8 /* config.xml in Resources */ = {isa = PBXBuildFile; fileRef = 2FAD9762203C412B000D30F8 /* config.xml */; };
 		2FF85D66B9111CAB975A08A2 /* TripActivity.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = E21A11DE7DCF31B6ECE482F5 /* TripActivity.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		30A6C34BE94323978650D9B8 /* WidgetBridgePlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = 35C3EFEF2CD1F4EA6A8AE68E /* WidgetBridgePlugin.swift */; };
 		4CAD60993BD8EF3B48860411 /* SwiftUI.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 83E4DB2A668387056C239A62 /* SwiftUI.framework */; };
 		4D22ABE92AF431CB00220026 /* CapApp-SPM in Frameworks */ = {isa = PBXBuildFile; productRef = 4D22ABE82AF431CB00220026 /* CapApp-SPM */; };
 		50379B232058CBB4000EE86E /* capacitor.config.json in Resources */ = {isa = PBXBuildFile; fileRef = 50379B222058CBB4000EE86E /* capacitor.config.json */; };
@@ -18,10 +20,14 @@
 		504EC30F1FED79650016851F /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 504EC30E1FED79650016851F /* Assets.xcassets */; };
 		504EC3121FED79650016851F /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 504EC3101FED79650016851F /* LaunchScreen.storyboard */; };
 		50B271D11FEDC1A000F3C39B /* public in Resources */ = {isa = PBXBuildFile; fileRef = 50B271D01FEDC1A000F3C39B /* public */; };
+		544AFE3434E74E30D2E03D2D /* UpNextWidget.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A26491CCC5099FBCDBDA6E6 /* UpNextWidget.swift */; };
 		5F982488A2DADFF989BA4138 /* TripLiveActivity.swift in Sources */ = {isa = PBXBuildFile; fileRef = FF04EFEE73F0C1CA07D071A7 /* TripLiveActivity.swift */; };
 		6DC87D051DDD1F4060B45CA7 /* ActivityKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = A249AA464000FB443EFE4B21 /* ActivityKit.framework */; };
 		761DB3A010585C9AF2F6D659 /* silence.caf in Resources */ = {isa = PBXBuildFile; fileRef = 9A5692ECA7EFDDBC7E5C70AB /* silence.caf */; };
 		79D4546D04A5D4E34A766D57 /* TripTracker.swift in Sources */ = {isa = PBXBuildFile; fileRef = AF5901F8ED27FA7278B6B42E /* TripTracker.swift */; };
+		7C4CD59F3EAC5EDF1DFA28A6 /* NextClassWidget.swift in Sources */ = {isa = PBXBuildFile; fileRef = 436A6A7A4AA1854A0E097618 /* NextClassWidget.swift */; };
+		821EE52C765C5F612A45838D /* BusStopWidget.swift in Sources */ = {isa = PBXBuildFile; fileRef = EBA87F302067901D8BEC4F78 /* BusStopWidget.swift */; };
+		8AF9DD4B3B8A3B45ACDA36FE /* WidgetShared.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4FB657E9C78BEBA3D9541B5B /* WidgetShared.swift */; };
 		9582B6832FE993A70072D4E8 /* SceneDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9582B6822FE993A50072D4E8 /* SceneDelegate.swift */; };
 		9A0DEAB1B9BB18EDA09F0B1C /* TripAttributes.swift in Sources */ = {isa = PBXBuildFile; fileRef = 11C8C628C4FE3E1916DA5E39 /* TripAttributes.swift */; };
 		A1B2C3D42F00000100000001 /* GoogleService-Info.plist in Resources */ = {isa = PBXBuildFile; fileRef = A1B2C3D42F00000100000002 /* GoogleService-Info.plist */; };
@@ -57,6 +63,11 @@
 /* Begin PBXFileReference section */
 		11C8C628C4FE3E1916DA5E39 /* TripAttributes.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = TripAttributes.swift; sourceTree = "<group>"; };
 		2FAD9762203C412B000D30F8 /* config.xml */ = {isa = PBXFileReference; lastKnownFileType = text.xml; path = config.xml; sourceTree = "<group>"; };
+		35C3EFEF2CD1F4EA6A8AE68E /* WidgetBridgePlugin.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = WidgetBridgePlugin.swift; sourceTree = "<group>"; };
+		436A6A7A4AA1854A0E097618 /* NextClassWidget.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = NextClassWidget.swift; sourceTree = "<group>"; };
+		45E0DF14F2E97F54E7DF1F68 /* App.entitlements */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.entitlements; path = App.entitlements; sourceTree = "<group>"; };
+		4A26491CCC5099FBCDBDA6E6 /* UpNextWidget.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = UpNextWidget.swift; sourceTree = "<group>"; };
+		4FB657E9C78BEBA3D9541B5B /* WidgetShared.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = WidgetShared.swift; sourceTree = "<group>"; };
 		50379B222058CBB4000EE86E /* capacitor.config.json */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.json; path = capacitor.config.json; sourceTree = "<group>"; };
 		504EC3041FED79650016851F /* App.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = App.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		504EC3071FED79650016851F /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
@@ -67,6 +78,8 @@
 		50B271D01FEDC1A000F3C39B /* public */ = {isa = PBXFileReference; lastKnownFileType = folder; path = public; sourceTree = "<group>"; };
 		5DC33E6C762CF6B1850FAA95 /* WidgetKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = WidgetKit.framework; path = Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS26.0.sdk/System/Library/Frameworks/WidgetKit.framework; sourceTree = DEVELOPER_DIR; };
 		6028CE9ACB8FFA1946B50F25 /* Foundation.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Foundation.framework; path = Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS26.0.sdk/System/Library/Frameworks/Foundation.framework; sourceTree = DEVELOPER_DIR; };
+		7BC7485EB947714E1447DA68 /* AppIntents.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = AppIntents.framework; path = Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS26.0.sdk/System/Library/Frameworks/AppIntents.framework; sourceTree = DEVELOPER_DIR; };
+		7ED1BF88465FA89BD012ADC7 /* TripActivity.entitlements */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.entitlements; path = TripActivity.entitlements; sourceTree = "<group>"; };
 		83E4DB2A668387056C239A62 /* SwiftUI.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = SwiftUI.framework; path = Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS26.0.sdk/System/Library/Frameworks/SwiftUI.framework; sourceTree = DEVELOPER_DIR; };
 		9582B6822FE993A50072D4E8 /* SceneDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SceneDelegate.swift; sourceTree = "<group>"; };
 		958DCC722DB07C7200EA8C5F /* debug.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; name = debug.xcconfig; path = ../debug.xcconfig; sourceTree = SOURCE_ROOT; };
@@ -77,6 +90,7 @@
 		D2C6D5283677B0ABA0539648 /* Info.plist */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		D680DE5AB70A987247E21B09 /* TripActivityPlugin.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = TripActivityPlugin.swift; sourceTree = "<group>"; };
 		E21A11DE7DCF31B6ECE482F5 /* TripActivity.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = TripActivity.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		EBA87F302067901D8BEC4F78 /* BusStopWidget.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = BusStopWidget.swift; sourceTree = "<group>"; };
 		FF04EFEE73F0C1CA07D071A7 /* TripLiveActivity.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = TripLiveActivity.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
@@ -97,6 +111,7 @@
 				F043B7FCBC2F55507F40E6BB /* WidgetKit.framework in Frameworks */,
 				4CAD60993BD8EF3B48860411 /* SwiftUI.framework in Frameworks */,
 				6DC87D051DDD1F4060B45CA7 /* ActivityKit.framework in Frameworks */,
+				201D49E63E2D2C782113C2CF /* AppIntents.framework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -116,6 +131,11 @@
 			children = (
 				FF04EFEE73F0C1CA07D071A7 /* TripLiveActivity.swift */,
 				D2C6D5283677B0ABA0539648 /* Info.plist */,
+				7ED1BF88465FA89BD012ADC7 /* TripActivity.entitlements */,
+				4FB657E9C78BEBA3D9541B5B /* WidgetShared.swift */,
+				436A6A7A4AA1854A0E097618 /* NextClassWidget.swift */,
+				4A26491CCC5099FBCDBDA6E6 /* UpNextWidget.swift */,
+				EBA87F302067901D8BEC4F78 /* BusStopWidget.swift */,
 			);
 			name = TripActivity;
 			path = TripActivity;
@@ -127,6 +147,7 @@
 				11C8C628C4FE3E1916DA5E39 /* TripAttributes.swift */,
 				AF5901F8ED27FA7278B6B42E /* TripTracker.swift */,
 				D680DE5AB70A987247E21B09 /* TripActivityPlugin.swift */,
+				35C3EFEF2CD1F4EA6A8AE68E /* WidgetBridgePlugin.swift */,
 			);
 			name = Trip;
 			path = Trip;
@@ -167,6 +188,7 @@
 				50B271D01FEDC1A000F3C39B /* public */,
 				460E7EE75886D3F29C360C79 /* Trip */,
 				9A5692ECA7EFDDBC7E5C70AB /* silence.caf */,
+				45E0DF14F2E97F54E7DF1F68 /* App.entitlements */,
 			);
 			path = App;
 			sourceTree = "<group>";
@@ -178,6 +200,7 @@
 				5DC33E6C762CF6B1850FAA95 /* WidgetKit.framework */,
 				83E4DB2A668387056C239A62 /* SwiftUI.framework */,
 				A249AA464000FB443EFE4B21 /* ActivityKit.framework */,
+				7BC7485EB947714E1447DA68 /* AppIntents.framework */,
 			);
 			name = iOS;
 			sourceTree = "<group>";
@@ -297,6 +320,7 @@
 				9A0DEAB1B9BB18EDA09F0B1C /* TripAttributes.swift in Sources */,
 				79D4546D04A5D4E34A766D57 /* TripTracker.swift in Sources */,
 				242094462CBCF3121D09A8B2 /* TripActivityPlugin.swift in Sources */,
+				30A6C34BE94323978650D9B8 /* WidgetBridgePlugin.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -306,6 +330,10 @@
 			files = (
 				5F982488A2DADFF989BA4138 /* TripLiveActivity.swift in Sources */,
 				C1C6CF24AECE565014F9EE04 /* TripAttributes.swift in Sources */,
+				8AF9DD4B3B8A3B45ACDA36FE /* WidgetShared.swift in Sources */,
+				7C4CD59F3EAC5EDF1DFA28A6 /* NextClassWidget.swift in Sources */,
+				544AFE3434E74E30D2E03D2D /* UpNextWidget.swift in Sources */,
+				821EE52C765C5F612A45838D /* BusStopWidget.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -344,12 +372,13 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				CLANG_ENABLE_OBJC_WEAK = NO;
+				CODE_SIGN_ENTITLEMENTS = TripActivity/TripActivity.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = FF395Z92C2;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = TripActivity/Info.plist;
-				IPHONEOS_DEPLOYMENT_TARGET = 16.2;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -415,7 +444,7 @@
 				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
-				IPHONEOS_DEPLOYMENT_TARGET = 16.2;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				MTL_ENABLE_DEBUG_INFO = YES;
 				ONLY_ACTIVE_ARCH = YES;
 				SDKROOT = iphoneos;
@@ -466,7 +495,7 @@
 				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
-				IPHONEOS_DEPLOYMENT_TARGET = 16.2;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				MTL_ENABLE_DEBUG_INFO = NO;
 				SDKROOT = iphoneos;
 				SWIFT_COMPILATION_MODE = wholemodule;
@@ -480,11 +509,12 @@
 			baseConfigurationReference = 958DCC722DB07C7200EA8C5F /* debug.xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_ENTITLEMENTS = App/App.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = FF395Z92C2;
 				INFOPLIST_FILE = App/Info.plist;
-				IPHONEOS_DEPLOYMENT_TARGET = 16.2;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -503,11 +533,12 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_ENTITLEMENTS = App/App.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = FF395Z92C2;
 				INFOPLIST_FILE = App/Info.plist;
-				IPHONEOS_DEPLOYMENT_TARGET = 16.2;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -525,12 +556,13 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				CLANG_ENABLE_OBJC_WEAK = NO;
+				CODE_SIGN_ENTITLEMENTS = TripActivity/TripActivity.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = FF395Z92C2;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = TripActivity/Info.plist;
-				IPHONEOS_DEPLOYMENT_TARGET = 16.2;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",

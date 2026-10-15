@@ -20,6 +20,7 @@ const state = {
   lessons: [],
   activities: [],
   tasks: [],
+  places: [],   // saved map places, e.g. {id, name:"Home", icon:"home", lat, lng, address}
   semester: {academicYear:ACADEMIC_YEAR, semester:SEMESTER}
 };
 
@@ -78,6 +79,7 @@ function resetState(){
   state.lessons=[];
   state.activities=[];
   state.tasks=[];
+  state.places=[];
   state.semester={academicYear:ACADEMIC_YEAR, semester:SEMESTER};
   lastRemoteCloudChangeAt=0;
 }
@@ -105,6 +107,7 @@ function startCloudSync(){
       if(Array.isArray(remote.lessons)) state.lessons=remote.lessons;
       if(Array.isArray(remote.activities)) state.activities=remote.activities;
       if(Array.isArray(remote.tasks)) state.tasks=remote.tasks;
+      if(Array.isArray(remote.places)) state.places=remote.places;
       if(remote.semester) state.semester=remote.semester;
     }
 

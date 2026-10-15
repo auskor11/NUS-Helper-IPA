@@ -26,6 +26,9 @@ button{cursor:pointer;background:none;border:0;padding:0;text-align:inherit}
 a{color:var(--accent)}
 h1,h2,h3,h4{margin:0;letter-spacing:-.01em}
 [hidden]{display:none!important}
+/* App-like: no text selection or callouts on long press, except in fields. */
+body{-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
+input,textarea,select{-webkit-user-select:text;user-select:text}
 .hidden{display:none!important}
 svg{flex-shrink:0}
 
@@ -276,7 +279,7 @@ select.input{background-image:linear-gradient(45deg,transparent 50%,var(--muted)
 
 /* ---------- Map ---------- */
 .view-map{position:fixed;inset:0 0 calc(var(--tabbar-h) + var(--safe-bottom)) 0;padding:0;animation:none}
-#mapCanvas{position:absolute;inset:0;z-index:0;background:#e5e3df}
+#mapCanvas{position:absolute;inset:0;z-index:0;background:#e5e3df;-webkit-touch-callout:none;-webkit-user-select:none;user-select:none}
 .map-top{position:absolute;top:calc(var(--safe-top) + 10px);left:12px;right:12px;z-index:500}
 .map-search{display:flex;align-items:center;gap:10px;background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:0 14px;height:50px;box-shadow:var(--shadow);color:var(--muted)}
 .map-search input{flex:1;border:0;background:transparent;outline:none;font-size:16px;color:var(--text);min-width:0}
@@ -307,6 +310,7 @@ select.input{background-image:linear-gradient(45deg,transparent 50%,var(--muted)
 .layer-row{display:flex;align-items:center;gap:10px;width:100%;padding:10px 4px;font-size:14px;font-weight:600}
 .layer-row span:nth-child(2){flex:1}
 .mk-nus.small{width:18px;height:18px;border-width:2px;flex-shrink:0}
+.layer-row .mk-public{width:18px;height:18px;border-radius:6px;flex-shrink:0}
 .panel-handle{display:block;width:100%;padding:4px 0 6px;margin-top:-8px;touch-action:none}
 .panel-handle .sheet-grabber{margin:4px auto 6px}
 .peek{display:none;margin:4px 0 0;color:var(--muted);font-size:14px;font-weight:600}
@@ -314,7 +318,7 @@ select.input{background-image:linear-gradient(45deg,transparent 50%,var(--muted)
 .map-panel.directions:not(.collapsed){max-height:52%}
 /* While a route is shown, shuttle stops step back so the route stands out. */
 .view-map.routing .mk-nus{opacity:.35;transform:scale(.65)}
-.view-map.routing .mk-public{opacity:.3}
+.view-map.routing .mk-public{opacity:.3;transform:scale(.7)}
 .view-map.routing .map-chips{display:none}
 .map-panel.collapsed>:not(.panel-handle):not(.panel-close):not(.kicker):not(h2):not(.panel-title):not(.peek){display:none!important}
 .map-panel.collapsed .peek{display:block}
@@ -322,7 +326,8 @@ select.input{background-image:linear-gradient(45deg,transparent 50%,var(--muted)
 .map-panel{position:absolute;left:0;right:0;bottom:0;z-index:600;background:var(--surface);border-radius:22px 22px 0 0;border-top:1px solid var(--line);box-shadow:0 -10px 30px rgba(0,0,0,.25);padding:8px 18px 18px;max-height:62%;overflow:auto;animation:up .22s ease}
 @keyframes up{from{transform:translateY(30px);opacity:.5}to{transform:none;opacity:1}}
 .panel-close{position:absolute;top:12px;right:12px;width:32px;height:32px;border-radius:50%;background:var(--surface2);display:grid;place-items:center;color:var(--muted)}
-.panel-title{display:flex;align-items:center;gap:10px;padding-right:40px}
+.panel-title{display:flex;align-items:center;gap:10px;padding-right:84px}
+.map-panel #refreshEta{position:absolute;top:12px;right:52px;width:32px;height:32px;border-radius:50%;background:var(--surface2);border:0;color:var(--muted);z-index:1}
 .panel-title h2{flex:1}
 .map-panel h2{font-size:22px;padding-right:40px}
 .panel-title h2{padding-right:0}
@@ -335,13 +340,24 @@ select.input{background-image:linear-gradient(45deg,transparent 50%,var(--muted)
 .dir-row .btn.primary{flex-basis:100%}
 .mk-nus{width:28px;height:28px;border-radius:50%;background:#ef4444;color:#fff;display:grid;place-items:center;border:2.5px solid #fff;box-shadow:0 2px 6px rgba(0,0,0,.35);transition:transform .15s}
 .mk-nus.on{transform:scale(1.35);background:#b91c1c}
-.mk-public{width:14px;height:14px;border-radius:50%;background:#16a34a;border:2px solid #fff;box-shadow:0 1px 3px rgba(0,0,0,.35)}
+.mk-public{width:22px;height:22px;border-radius:7px;background:#16a34a;color:#fff;display:grid;place-items:center;border:2px solid #fff;box-shadow:0 2px 5px rgba(0,0,0,.35)}
 .mk-pin{width:30px;height:30px;margin-left:0;border-radius:50% 50% 50% 0;background:var(--accent);transform:rotate(-45deg);border:3px solid #fff;box-shadow:0 3px 8px rgba(0,0,0,.35)}
 .mk-me{width:22px;height:22px;border-radius:50%;background:rgba(59,130,246,.25);display:grid;place-items:center}
 .mk-me span{width:12px;height:12px;border-radius:50%;background:#3b82f6;border:2px solid #fff;box-shadow:0 0 0 0 rgba(59,130,246,.6);animation:pulse 2s infinite}
 @keyframes pulse{70%{box-shadow:0 0 0 12px rgba(59,130,246,0)}100%{box-shadow:0 0 0 0 rgba(59,130,246,0)}}
 .leaflet-container{font-family:inherit}
 .leaflet-control-attribution{font-size:9px!important}
+
+/* Saved places */
+.mk-saved{width:30px;height:30px;border-radius:50%;background:var(--accent);color:#fff;display:grid;place-items:center;border:2.5px solid #fff;box-shadow:0 2px 6px rgba(0,0,0,.35)}
+.saved-chips{display:contents}
+.saved-chip svg{color:var(--accent)}
+.result-icon.t-saved{background:var(--accent);color:#fff}
+.place-actions{display:grid;grid-template-columns:1fr auto;gap:8px;margin:12px 0 6px}
+.place-actions #walkHere{margin:0}
+.icon-pick{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
+.icon-opt{display:flex;flex-direction:column;align-items:center;gap:4px;padding:10px 4px;border-radius:12px;background:var(--surface2);border:1.5px solid transparent;color:var(--muted);font-size:12px;font-weight:600}
+.icon-opt.on{border-color:var(--accent);color:var(--accent)}
 
 /* Walking directions */
 .route-summary{display:flex;align-items:baseline;gap:10px;margin:6px 0 12px}

@@ -6,6 +6,9 @@ import WidgetKit
 struct TripActivityBundle: WidgetBundle {
     var body: some Widget {
         TripLiveActivity()
+        NextClassWidget()
+        UpNextWidget()
+        BusStopWidget()
     }
 }
 

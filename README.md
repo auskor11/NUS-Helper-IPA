@@ -56,6 +56,16 @@ To test a ride in the simulator, move the simulated location along stops:
 xcrun simctl location booted start --speed=4 1.2966,103.7735 1.297204,103.772688 1.298904,103.774118 1.301081,103.77369 1.303876,103.774621
 ```
 
+## Home screen widgets
+
+Press and hold the home screen → Edit → Add Widget → NUS Companion.
+
+- **Next class** (small, lock screen): what's on now or next, with a countdown. Works offline.
+- **Up next** (medium): the next class and the NUS shuttle to catch from your usual stop (press and hold the widget → Edit Widget). It picks the latest bus that still gets you there on time, using live times.
+- **Bus stop** (small, medium, lock screen): live NUS shuttle and public bus arrivals at a stop you pick, with a refresh button.
+
+The app writes the schedule, NUS stops and shuttle routes to the `group.auskor.NUS-Helper` App Group (`WidgetBridgePlugin.swift`, called from `native/native-app.js`); the widgets in `ios/App/TripActivity/` read it and fetch live bus times themselves. Widget taps open the app via `nuscompanion://open/<route>`. Home screen widgets refresh about every 10 minutes (iOS sets the limit); between refreshes the minutes count down on their own.
+
 ## Files
 
 - `scripts/sync-web.mjs` copies the web app into `www/` and applies the patches.

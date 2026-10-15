@@ -443,6 +443,10 @@ async function searchPlacesLocal(query,{limit=10,includeStops=true}={}){
   const q=normaliseCode(query);
   if(!q) return [];
   const results=[];
+  for(const p of state.places||[]){
+    const sc=scoreMatch(q,p.name,p.address||"");
+    if(sc) results.push({type:"saved",...p,code:p.name,name:p.address||"Saved place",score:sc+20});
+  }
   if(includeStops){
     for(const s of NUS_STOPS){ const sc=scoreMatch(q,s.code,s.name); if(sc) results.push({...s,score:sc+5}); }
   }
@@ -488,7 +492,25 @@ async function resolveVenue(name){
 }
 
 function placeKindLabel(p){
-  return {nus:"NUS shuttle stop",public:"Bus stop",venue:"NUS venue",place:"Place"}[p.type]||"Place";
+  return {nus:"NUS shuttle stop",public:"Bus stop",venue:"NUS venue",place:"Place",saved:"Saved place"}[p.type]||"Place";
+}
+
+// Icons for saved places.
+const PLACE_ICONS={
+  home:{label:"Home",path:"M3 10.5 12 3l9 7.5V20a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"},
+  work:{label:"Work",path:"M4 7h16a1 1 0 0 1 1 1v11a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V8a1 1 0 0 1 1-1zM9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"},
+  food:{label:"Food",path:"M7 3v8M5 3v5a2 2 0 0 0 4 0V3M7 11v10M17 3c-2 0-3 2-3 5s1 4 3 4v9"},
+  star:{label:"Favourite",path:"M12 3l2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1-4.4-4.3 6.1-.9z"}
+};
+
+// Street address for a point (OpenStreetMap), for dropped pins.
+async function reverseGeocode(lat,lng){
+  try{
+    const d=await getJSON(`https://nominatim.openstreetmap.org/reverse?${new URLSearchParams({lat,lon:lng,format:"jsonv2",zoom:"18"})}`,{timeout:6000});
+    const a=d.address||{};
+    const line=[a.house_number&&a.road?`${a.house_number} ${a.road}`:a.road,a.building||a.amenity,a.suburb||a.neighbourhood].filter(Boolean);
+    return {title:d.name||line[0]||"Dropped pin",address:[...new Set(line)].join(", ")||d.display_name||""};
+  }catch{ return {title:"Dropped pin",address:`${lat.toFixed(5)}, ${lng.toFixed(5)}`}; }
 }
 
 /* ---------- Venue picker (forms) ---------- */

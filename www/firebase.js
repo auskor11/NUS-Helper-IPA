@@ -146,6 +146,7 @@
             lessons:snapshot.lessons||[],
             activities:snapshot.activities||[],
             tasks:snapshot.tasks||[],
+            places:snapshot.places||[],
             semester:snapshot.semester||{},
             clientUpdatedAt:Date.now(),
             updatedAt:window.firebase.firestore.FieldValue.serverTimestamp()
