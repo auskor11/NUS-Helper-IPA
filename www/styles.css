@@ -301,6 +301,7 @@ select.input{background-image:linear-gradient(45deg,transparent 50%,var(--muted)
 .panel-title h2{flex:1}
 .map-panel h2{font-size:22px;padding-right:40px}
 .panel-title h2{padding-right:0}
+.map-panel #walkHere{margin:12px 0 6px}
 .sub-head{display:flex;flex-direction:column;gap:2px;margin:18px 0 6px;font-size:14px}
 .sub-head small{color:var(--muted);font-weight:500;font-size:12.5px}
 .sub-head .link{text-align:left}
@@ -330,6 +331,35 @@ select.input{background-image:linear-gradient(45deg,transparent 50%,var(--muted)
 .route-steps li{display:flex;gap:12px;align-items:flex-start;padding:9px 0;border-top:1px solid var(--line);font-size:14px}
 .route-steps li svg{color:var(--accent);margin-top:2px}
 .route-steps small{display:block;color:var(--muted);font-size:12px}
+
+/* Directions: modes, transit options, itinerary */
+.mode-tabs{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin:10px 0 14px}
+.mode-tabs button{display:flex;flex-direction:column;align-items:center;gap:2px;padding:8px 4px;border-radius:12px;background:var(--surface2);border:1.5px solid transparent;color:var(--muted)}
+.mode-tabs button span{font-size:12px;font-weight:600}
+.mode-tabs button small{font-size:12px;font-weight:700;color:var(--text)}
+.mode-tabs button.on{border-color:var(--accent);color:var(--accent);background:color-mix(in srgb,var(--accent) 12%,var(--surface2))}
+.route-card{display:flex;flex-direction:column;gap:8px;width:100%;text-align:left;padding:12px 14px;border-radius:14px;border:1px solid var(--line);background:var(--surface2);margin-bottom:8px}
+.route-card:active{transform:scale(.99)}
+.route-card-top{display:flex;justify-content:space-between;align-items:baseline;gap:8px}
+.route-card-top b{font-size:18px}
+.route-card-top span{color:var(--muted);font-size:13px}
+.route-card small{color:var(--muted);font-size:12.5px}
+.route-legs{display:flex;flex-wrap:wrap;align-items:center;gap:4px}
+.leg-chip{display:inline-flex;align-items:center;gap:4px;padding:3px 8px;border-radius:7px;background:var(--c);color:#fff;font-size:12.5px;font-weight:700}
+.leg-chip.walk{background:transparent;color:var(--muted);padding:3px 2px;font-weight:600}
+.leg-sep{color:var(--muted);font-size:12px}
+.route-actions{margin-top:12px}
+.itinerary{list-style:none;margin:6px 0 0;padding:0}
+.itinerary li{display:flex;gap:12px;position:relative;padding-bottom:14px}
+.itinerary li:not(:last-child):before{content:"";position:absolute;left:13px;top:28px;bottom:2px;width:3px;border-radius:2px;background:var(--c,var(--line))}
+.itinerary li.it-walk:before{background:repeating-linear-gradient(to bottom,var(--muted) 0 3px,transparent 3px 7px);width:2px;left:14px}
+.it-dot{width:29px;height:29px;border-radius:50%;display:grid;place-items:center;background:var(--c);color:#fff;flex-shrink:0}
+.it-dot.walk{background:var(--surface2);color:var(--muted);border:1px solid var(--line)}
+.it-dot.end{background:var(--accent)}
+.itinerary li>div{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px;padding-top:4px}
+.itinerary small{color:var(--muted);font-size:12.5px}
+.itinerary small b{color:var(--text);font-weight:600}
+.live-next{display:flex;align-items:center;gap:6px;font-size:13px;font-weight:600;margin:4px 0}
 
 /* ---------- More ---------- */
 .account-card{display:flex;align-items:center;gap:14px}

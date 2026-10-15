@@ -92,7 +92,7 @@ views.map=(()=>{
   }
 
   function walkButton(){
-    return `<button class="btn primary full" id="walkHere">${icon("M13 4a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3zM9.5 22l2-7 2.5 2v5M8 12l1-4 4-1 3 4 3 1M10 8l-2 6",18)}Directions</button>`;
+    return `<button class="btn primary full" id="walkHere">${icon("M3 11l19-9-9 19-2-8-8-2z",18)}Directions</button>`;
   }
 
   const TURN_ICONS={left:"M9 14 4 9l5-5M4 9h10a6 6 0 0 1 6 6v5",right:"M15 14l5-5-5-5M20 9H10a6 6 0 0 0-6 6v5",straight:"M12 19V5M5 12l7-7 7 7"};
@@ -102,14 +102,49 @@ views.map=(()=>{
     return icon(TURN_ICONS[dir],16);
   }
 
-  // Walking directions drawn on this map, plus a shuttle option when one helps.
+  const MODE_ICONS={
+    transit:"M8 6v6M16 6v6M2 12h20M7 18h.01M17 18h.01M6 3h12a3 3 0 0 1 3 3v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a3 3 0 0 1 3-3zM7 21l1-3M17 21l-1-3",
+    walk:"M13 4a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3zM9.5 22l2-7 2.5 2v5M8 12l1-4 4-1 3 4 3 1M10 8l-2 6",
+    cycle:"M5.5 21a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7zM18.5 21a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7zM15 6a1 1 0 1 0 0-2 1 1 0 0 0 0 2zM12 17.5V14l-3-3 4-3 2 3h2",
+    drive:"M5 17h14M5 17a2 2 0 1 0 4 0M15 17a2 2 0 1 0 4 0M3 17v-5l2-5h14l2 5v5M3 12h18"
+  };
+  const MODE_LABELS={transit:"Transit",walk:"Walk",cycle:"Cycle",drive:"Drive"};
+
+  function legIcon(leg){
+    if(leg.mode==="WALK") return MODE_ICONS.walk;
+    if(leg.mode==="BUS") return MODE_ICONS.transit;
+    return "M8 3h8a4 4 0 0 1 4 4v8a3 3 0 0 1-3 3H7a3 3 0 0 1-3-3V7a4 4 0 0 1 4-4zM4 11h16M8 15h.01M16 15h.01M8 21l2-3M16 21l-2-3";
+  }
+
+  function drawPath(layers,fit=true){
+    clearRoute();
+    routeLayer=L.layerGroup(layers).addTo(map);
+    if(fit) fitRouteToPanel();
+  }
+
+  function fitRouteToPanel(){
+    if(!routeLayer) return;
+    const pts=[];
+    routeLayer.eachLayer(l=>l.getLatLngs&&pts.push(...l.getLatLngs().flat()));
+    if(lastPosition) pts.push(L.latLng(lastPosition.lat,lastPosition.lng));
+    if(!pts.length) return;
+    const wide=matchMedia("(min-width:900px)").matches;
+    const panelH=$("#mapPanel",el).offsetHeight;
+    map.fitBounds(L.latLngBounds(pts),{paddingTopLeft:[wide?460:30,150],paddingBottomRight:[30,wide?40:panelH+30]});
+  }
+
+  // Directions with Transit (bus + MRT), Walk, Cycle and Drive. All modes load
+  // together so each tab shows its time; the route is drawn on this map.
   async function showRoute(dest){
     clearInterval(refreshTimer);
     clearRoute();
     const back=()=>dest.type==="nus"||dest.type==="public"?selectStop(dest):selectPlace(dest);
-    const title=dest.type==="public"?dest.name:dest.type==="nus"?dest.name:dest.code;
-    openPanel(`<p class="kicker">WALKING DIRECTIONS</p><h2>${esc(title)}</h2>
-      <div id="routeBody"><div class="empty-inline"><span class="spinner sm"></span>Finding the best walking route…</div></div>`);
+    const title=dest.type==="public"||dest.type==="nus"?dest.name:dest.code;
+    openPanel(`<p class="kicker">DIRECTIONS</p><h2>${esc(title)}</h2>
+      <div class="mode-tabs" id="modeTabs">${Object.keys(MODE_LABELS).map(m=>`<button data-mode="${m}">${icon(MODE_ICONS[m],18)}<span>${MODE_LABELS[m]}</span><small>…</small></button>`).join("")}</div>
+      <div id="routeBody"><div class="empty-inline"><span class="spinner sm"></span>Finding routes…</div></div>`);
+    $$("#modeTabs button",el).forEach(b=>b.onclick=()=>pick(b.dataset.mode));
+
     let from;
     try{ from=await getPosition({fresh:true}); startLocation(); }
     catch(err){
@@ -117,54 +152,136 @@ views.map=(()=>{
       $("#routeBack",el).onclick=back;
       return;
     }
-    let route;
-    try{ route=await loadWalkingRoute(from,dest); }
-    catch(err){
-      $("#routeBody",el).innerHTML=`<div class="empty-inline">Couldn't get a walking route right now. Check your connection and try again.</div><button class="btn secondary full" id="routeBack">Back</button>`;
-      $("#routeBack",el).onclick=back;
-      return;
-    }
     if(selected!==dest) return;
 
-    routeLayer=L.layerGroup([
-      L.polyline(route.path,{color:"#ffffff",weight:9,opacity:.9}),
-      L.polyline(route.path,{color:"#6d5df5",weight:5,opacity:1}),
-      L.polyline([[from.lat,from.lng],route.path[0]],{color:"#6d5df5",weight:3,dashArray:"4 6"})
-    ]).addTo(map);
-
-    const mins=walkMinutes(route.duration);
-    const arrive=new Date(Date.now()+route.duration*1000).toLocaleTimeString("en-SG",{hour:"numeric",minute:"2-digit"});
-    $("#routeBody",el).innerHTML=`
-      <div class="route-summary"><b>${mins} min</b><span>${distanceLabel(route.distance)} walk · arrive ${arrive}</span></div>
-      <div id="shuttleOpt"></div>
-      <details class="route-steps"><summary>Step-by-step (${route.steps.length})</summary>
-        <ol>${route.steps.map(st=>`<li>${stepIcon(st)}<span>${esc(st.text)}${st.type!=="arrive"?`<small>${distanceLabel(st.distance)}</small>`:""}</span></li>`).join("")}</ol>
-      </details>
-      <div class="two"><button class="btn secondary" id="routeRecenter">Show my location</button><button class="btn danger-soft" id="routeEnd">End</button></div>
-      ${route.distance>3000?`<p class="small-help">That's a long walk. For buses and the MRT, <a href="https://maps.apple.com/?daddr=${dest.lat},${dest.lng}&dirflg=r" target="_blank" rel="noopener">open public transport directions</a>.</p>`:""}`;
-    // Fit the whole route into the map area above the panel.
-    const fitRoute=()=>{
-      const wide=matchMedia("(min-width:900px)").matches;
-      const panelH=$("#mapPanel",el).offsetHeight;
-      map.fitBounds(L.latLngBounds([[from.lat,from.lng],...route.path]),{
-        paddingTopLeft:[wide?460:30,150], paddingBottomRight:[30,wide?40:panelH+30]
-      });
+    const straight=distanceM(from,dest);
+    const results={
+      transit:Promise.all([loadTransitRoutes(from,dest).catch(()=>[]),straight>400?shuttleOption(from,dest):null]),
+      walk:loadStreetRoute("walk",from,dest),
+      cycle:loadStreetRoute("cycle",from,dest),
+      drive:loadStreetRoute("drive",from,dest)
     };
-    fitRoute();
-    $("#routeEnd",el).onclick=back;
-    $("#routeRecenter",el).onclick=()=>{ if(lastPosition) map.setView([lastPosition.lat,lastPosition.lng],18,{animate:true}); };
-
-    const opt=await shuttleOption(from,dest);
-    if(opt && selected===dest && $("#shuttleOpt",el)){
-      $("#shuttleOpt",el).innerHTML=`<div class="shuttle-opt">
-        <p class="kicker">OR TAKE THE SHUTTLE</p>
-        <p>Walk ${distanceLabel(opt.from.distance)} to <b>${esc(opt.from.name)}</b>, ride to <b>${esc(opt.to.name)}</b>, then walk ${distanceLabel(opt.to.distance)}.</p>
-        <div class="eta-list">${opt.services.slice(0,3).map(r=>`<div class="eta-row"><span class="route-badge nus r-${esc(String(r.service).replace(/[^A-Za-z0-9]/g,""))}">${esc(r.service)}</span><span class="eta-next">${r.next==null?"–":r.next<=0?"Arriving":`<b>${r.next}</b> min`}</span><span class="eta-then">at ${esc(opt.from.name)}</span></div>`).join("")}</div>
-        <button class="link" id="optStop">See ${esc(opt.from.name)} stop</button>
-      </div>`;
-      $("#optStop",el).onclick=()=>selectStop(opt.from);
-      fitRoute();
+    for(const [m,pr] of Object.entries(results)){
+      pr.then(r=>{
+        const tab=$(`#modeTabs [data-mode="${m}"] small`,el); if(!tab) return;
+        if(m==="transit"){ const [its,sh]=r; const best=Math.min(...its.map(i=>i.duration),sh?Infinity:Infinity); tab.textContent=its.length?`${walkMinutes(best)} min`:sh?"Shuttle":"–"; }
+        else tab.textContent=`${walkMinutes(r.duration)} min`;
+      }).catch(()=>{ const tab=$(`#modeTabs [data-mode="${m}"] small`,el); if(tab) tab.textContent="–"; });
     }
+
+    let current=null;
+    async function pick(mode){
+      current=mode;
+      $$("#modeTabs button",el).forEach(b=>b.classList.toggle("on",b.dataset.mode===mode));
+      $("#routeBody",el).innerHTML=`<div class="empty-inline"><span class="spinner sm"></span>Finding ${MODE_LABELS[mode].toLowerCase()} routes…</div>`;
+      let r;
+      try{ r=await results[mode]; }catch{ r=null; }
+      if(current!==mode || selected!==dest) return;
+      if(mode==="transit") renderTransitList(r[0],r[1]);
+      else if(r) renderStreet(mode,r);
+      else $("#routeBody",el).innerHTML=`<div class="empty-inline">No ${MODE_LABELS[mode].toLowerCase()} route found.</div>`;
+    }
+
+    function footer(){
+      return `<div class="two route-actions"><button class="btn secondary" id="routeRecenter">Show my location</button><button class="btn danger-soft" id="routeEnd">End</button></div>`;
+    }
+    function bindFooter(){
+      $("#routeEnd",el).onclick=back;
+      $("#routeRecenter",el).onclick=()=>{ if(lastPosition) map.setView([lastPosition.lat,lastPosition.lng],18,{animate:true}); };
+    }
+
+    function renderStreet(mode,route){
+      const arrive=clockTime(new Date(Date.now()+route.duration*1000));
+      $("#routeBody",el).innerHTML=`
+        <div class="route-summary"><b>${walkMinutes(route.duration)} min</b><span>${distanceLabel(route.distance)} · arrive ${arrive}</span></div>
+        <details class="route-steps"><summary>Step-by-step (${route.steps.length})</summary>
+          <ol>${route.steps.map(st=>`<li>${stepIcon(st)}<span>${esc(st.text)}${st.type!=="arrive"?`<small>${distanceLabel(st.distance)}</small>`:""}</span></li>`).join("")}</ol>
+        </details>${footer()}`;
+      bindFooter();
+      const color={walk:"#6d5df5",cycle:"#0ea5e9",drive:"#f97316"}[mode];
+      drawPath([
+        L.polyline(route.path,{color:"#ffffff",weight:9,opacity:.9}),
+        L.polyline(route.path,{color,weight:5,opacity:1,dashArray:mode==="walk"?"1 9":null,lineCap:"round"}),
+        L.polyline([[from.lat,from.lng],route.path[0]],{color,weight:3,dashArray:"4 6"})
+      ]);
+    }
+
+    function legChips(it){
+      return it.legs.filter(l=>l.mode!=="WALK"||l.distance>150).map(l=>l.mode==="WALK"
+        ?`<span class="leg-chip walk">${icon(MODE_ICONS.walk,13)}${walkMinutes(l.duration)}</span>`
+        :`<span class="leg-chip" style="--c:${lineColor(l)}">${icon(legIcon(l),13)}${esc(l.line)}</span>`).join(`<span class="leg-sep">›</span>`);
+    }
+
+    function renderTransitList(its,shuttle){
+      const shuttleCard=shuttle?`<button class="route-card" id="shuttleCard">
+          <div class="route-card-top"><b>NUS shuttle</b><span class="pill live">Live</span></div>
+          <div class="route-legs"><span class="leg-chip walk">${icon(MODE_ICONS.walk,13)}${walkMinutes(shuttle.from.distance/1.3)}</span><span class="leg-sep">›</span>${shuttle.services.slice(0,3).map(sv=>`<span class="leg-chip" style="--c:#ef4444">${esc(sv.service)}</span>`).join("")}</div>
+          <small>From ${esc(shuttle.from.name)} · next ${shuttle.services[0].next==null?"–":shuttle.services[0].next<=0?"arriving":`in ${shuttle.services[0].next} min`}</small>
+        </button>`:"";
+      if(!its.length && !shuttle){
+        $("#routeBody",el).innerHTML=`<div class="empty-inline">No public transport routes found right now. Try Walk or Drive.</div>${footer()}`;
+        bindFooter(); clearRoute(); return;
+      }
+      $("#routeBody",el).innerHTML=`${shuttleCard}${its.map((it,i)=>`
+        <button class="route-card" data-i="${i}">
+          <div class="route-card-top"><b>${walkMinutes(it.duration)} min</b><span>${clockTime(it.start)} – ${clockTime(it.end)}</span></div>
+          <div class="route-legs">${legChips(it)}</div>
+          <small>${it.transfers?`${it.transfers} transfer${it.transfers===1?"":"s"} · `:""}${distanceLabel(it.walk)} walking</small>
+        </button>`).join("")}
+        <p class="small-help">Bus and MRT times are from LTA timetables via Transitous. Live bus arrivals show in each route's steps.</p>
+        ${footer()}`;
+      bindFooter();
+      $$(".route-card[data-i]",el).forEach(b=>b.onclick=()=>renderTransitDetail(its[+b.dataset.i],its,shuttle));
+      $("#shuttleCard",el)?.addEventListener("click",()=>selectStop(shuttle.from));
+      // Preview the first option on the map.
+      if(its[0]) drawTransit(its[0]);
+    }
+
+    function drawTransit(it){
+      const layers=[];
+      for(const l of it.legs){
+        if(!l.path.length) continue;
+        if(l.mode==="WALK") layers.push(L.polyline(l.path,{color:"#6d5df5",weight:4,dashArray:"1 8",lineCap:"round"}));
+        else{
+          layers.push(L.polyline(l.path,{color:"#ffffff",weight:9,opacity:.9}));
+          layers.push(L.polyline(l.path,{color:lineColor(l),weight:6}));
+          layers.push(L.circleMarker([l.from.lat,l.from.lng],{radius:6,color:"#fff",weight:2,fillColor:lineColor(l),fillOpacity:1}));
+          layers.push(L.circleMarker([l.to.lat,l.to.lng],{radius:6,color:"#fff",weight:2,fillColor:lineColor(l),fillOpacity:1}));
+        }
+      }
+      drawPath(layers);
+    }
+
+    async function renderTransitDetail(it,its,shuttle){
+      const first=it.legs.find(l=>l.mode==="BUS");
+      $("#routeBody",el).innerHTML=`
+        <button class="link" id="routeOptions">‹ All routes</button>
+        <div class="route-summary"><b>${walkMinutes(it.duration)} min</b><span>${clockTime(it.start)} – ${clockTime(it.end)}</span></div>
+        <ol class="itinerary">${it.legs.map(l=>{
+          if(l.mode==="WALK") return l.distance<20?"":`<li class="it-walk"><span class="it-dot walk">${icon(MODE_ICONS.walk,14)}</span><div><b>Walk ${distanceLabel(l.distance)}</b><small>to ${esc(l.to.name)} · ${walkMinutes(l.duration)} min</small></div></li>`;
+          return `<li style="--c:${lineColor(l)}"><span class="it-dot">${icon(legIcon(l),14)}</span><div>
+            <b>${esc(transitLabel(l))}</b>${l.headsign?`<small>towards ${esc(l.headsign)}</small>`:""}
+            <small>Board at <b>${esc(l.from.name)}</b>${l.from.code&&l.mode==="BUS"?` (${esc(l.from.code)})`:""} · ${clockTime(l.start)}</small>
+            ${l===first?`<div class="live-next" id="liveNext"><span class="spinner sm"></span>Checking live arrival…</div>`:""}
+            <small>${l.stops} stop${l.stops===1?"":"s"} · alight at <b>${esc(l.to.name)}</b> · ${clockTime(l.end)}</small>
+          </div></li>`;
+        }).join("")}
+        <li class="it-end"><span class="it-dot end">${icon("M12 21s-7-6.2-7-11.5a7 7 0 0 1 14 0C19 14.8 12 21 12 21z",14)}</span><div><b>Arrive at ${esc(title)}</b><small>${clockTime(it.end)}</small></div></li>
+        </ol>${footer()}`;
+      bindFooter();
+      $("#routeOptions",el).onclick=()=>renderTransitList(its,shuttle);
+      drawTransit(it);
+      if(first?.from.code){
+        try{
+          const live=(await loadPublicArrivals(first.from.code)).find(x=>String(x.service)===String(first.line));
+          const box=$("#liveNext",el); if(!box) return;
+          box.innerHTML=live?`<span class="pill live">Live</span> Next ${esc(first.line)} ${live.next==null?"–":live.next<=0?"arriving now":`in ${live.next} min`}${live.then!=null?`, then ${live.then} min`:""}`
+            :`No live data for bus ${esc(first.line)} right now.`;
+        }catch{ const box=$("#liveNext",el); if(box) box.textContent="Live arrival unavailable."; }
+      }
+    }
+
+    pick(straight>1000?"transit":"walk");
   }
 
   async function selectStop(stop){
@@ -187,10 +304,10 @@ views.map=(()=>{
     openPanel(`<p class="kicker">${stop.type==="nus"?"NUS SHUTTLE STOP":`BUS STOP ${esc(stop.code)}`}</p>
       <div class="panel-title"><h2>${esc(stop.name)}</h2><button class="icon-btn sm" id="refreshEta" aria-label="Refresh">${icon("M21 12a9 9 0 1 1-3-6.7L21 8M21 3v5h-5",18)}</button></div>
       <p class="subtle">${[stop.type==="public"&&stop.road?esc(stop.road):"",distanceText(stop).replace(/^ · /,"")].filter(Boolean).join(" · ")}</p>
+      ${walkButton()}
       <div id="etaMain"><div class="empty-inline"><span class="spinner sm"></span>Loading live times…</div></div>
       ${twin?`<h4 class="sub-head">${twin.type==="nus"?"NUS shuttles here":"Public buses here"}<small>${esc(twin.type==="nus"?twin.name:`${twin.name} · ${twin.code}`)}</small></h4><div id="etaTwin"></div>`:""}
-      <p class="updated" id="etaUpdated"></p>
-      ${walkButton()}`);
+      <p class="updated" id="etaUpdated"></p>`);
     $("#walkHere",el).onclick=()=>showRoute(stop);
 
     focusOn(stop,Math.max(map.getZoom(),17));

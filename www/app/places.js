@@ -72,11 +72,6 @@ async function loadPublicArrivals(code){
     .sort((a,b)=>(a.next??999)-(b.next??999));
 }
 
-function etaLabel(m){
-  if(m==null) return "–";
-  return m<=0 ? "Arr" : `${m}`;
-}
-
 // Arrival board HTML. Shuttle boards fall back to an embedded NextBus page in
 // browsers, where the shuttle API is blocked by CORS.
 async function arrivalsHTML(stop,{embed=true}={}){
@@ -88,7 +83,7 @@ async function arrivalsHTML(stop,{embed=true}={}){
       <div class="eta-row">
         <span class="route-badge ${isNus?`nus r-${esc(String(r.service).replace(/[^A-Za-z0-9]/g,""))}`:"public"}">${esc(r.service)}</span>
         <span class="eta-next">${r.next==null?"–":r.next<=0?"Arriving":`<b>${r.next}</b> min`}</span>
-        <span class="eta-then">${r.then==null?"":`then ${etaLabel(r.then)}${r.then>0?" min":""}`}</span>
+        <span class="eta-then">${r.then==null?"":r.then<=0?"then arriving":`then ${r.then} min`}</span>
       </div>`).join("")}</div>`;
   }catch(err){
     if(isNus && !isNativeApp() && !embed){
@@ -127,31 +122,98 @@ async function publicStopNear(pos,maxM=45){
 /* ---------- Location ---------- */
 
 let lastPosition=null;
+// The map keeps lastPosition up to date while it's open, so a recent fix is
+// reused; if a new reading is slow, fall back to one from the last 5 minutes.
 function getPosition({fresh=false}={}){
-  if(!fresh && lastPosition && Date.now()-lastPosition.at<60000) return Promise.resolve(lastPosition);
+  const age=lastPosition?Date.now()-lastPosition.at:Infinity;
+  if(age<(fresh?20000:60000)) return Promise.resolve(lastPosition);
   return new Promise((resolve,reject)=>{
     if(!navigator.geolocation) return reject(new Error("Location isn't available on this device."));
     navigator.geolocation.getCurrentPosition(p=>{
       lastPosition={lat:p.coords.latitude,lng:p.coords.longitude,accuracy:p.coords.accuracy,at:Date.now()};
       resolve(lastPosition);
-    },err=>reject(new Error(err.code===1?"Location permission is off.":"Couldn't get your location.")),
-    {enableHighAccuracy:true,timeout:10000,maximumAge:30000});
+    },err=>{
+      if(err.code!==1 && lastPosition && Date.now()-lastPosition.at<300000) return resolve(lastPosition);
+      reject(new Error(err.code===1?"Location permission is off.":"Couldn't get your location."));
+    },{enableHighAccuracy:true,timeout:10000,maximumAge:30000});
   });
 }
 
-/* ---------- Walking directions ---------- */
+/* ---------- Directions ---------- */
 
-// Walking route from OpenStreetMap's foot router (routing.openstreetmap.de).
-// Returns {distance (m), duration (s), path [[lat,lng]...], steps [{text, distance}]}.
-async function loadWalkingRoute(from,to){
-  const url=`https://routing.openstreetmap.de/routed-foot/route/v1/foot/${from.lng},${from.lat};${to.lng},${to.lat}?overview=full&geometries=geojson&steps=true`;
+// Walking, cycling and driving routes from OpenStreetMap's routers
+// (routing.openstreetmap.de). Returns {distance (m), duration (s),
+// path [[lat,lng]...], steps [{text, distance, type, modifier}]}.
+const OSM_PROFILES={walk:["routed-foot","foot"],cycle:["routed-bike","bike"],drive:["routed-car","driving"]};
+
+async function loadStreetRoute(mode,from,to){
+  const [server,profile]=OSM_PROFILES[mode];
+  const url=`https://routing.openstreetmap.de/${server}/route/v1/${profile}/${from.lng},${from.lat};${to.lng},${to.lat}?overview=full&geometries=geojson&steps=true`;
   const data=await getJSON(url);
   const r=data?.routes?.[0];
-  if(data?.code!=="Ok" || !r) throw new Error("No walking route found.");
+  if(data?.code!=="Ok" || !r) throw new Error("No route found.");
   const steps=(r.legs?.[0]?.steps||[])
     .filter(s=>s.maneuver?.type==="arrive" || s.distance>=5)
     .map(s=>({text:stepText(s),distance:s.distance,type:s.maneuver?.type,modifier:s.maneuver?.modifier||""}));
   return {distance:r.distance,duration:r.duration,path:r.geometry.coordinates.map(([lng,lat])=>[lat,lng]),steps};
+}
+
+// Google-style encoded polyline (Transitous uses precision 6).
+function decodePolyline(str,precision=6){
+  const factor=10**precision, out=[];
+  let i=0,lat=0,lng=0;
+  while(i<str.length){
+    for(const axis of [0,1]){
+      let shift=0,result=0,b;
+      do{ b=str.charCodeAt(i++)-63; result|=(b&31)<<shift; shift+=5; }while(b>=32);
+      const d=result&1?~(result>>1):result>>1;
+      if(axis===0) lat+=d; else lng+=d;
+    }
+    out.push([lat/factor,lng/factor]);
+  }
+  return out;
+}
+
+const MRT_COLORS={EW:"#009645",CG:"#009645",NS:"#d42e12",NE:"#9900aa",CC:"#fa9e0d",CE:"#fa9e0d",DT:"#005ec4",TE:"#9d5b25"};
+function lineColor(leg){
+  if(leg.mode==="WALK") return "#8b93a5";
+  if(leg.mode==="BUS") return "#16a34a";
+  return MRT_COLORS[leg.line] || "#748477"; // LRT and anything else
+}
+
+function transitLabel(leg){
+  if(leg.mode==="BUS") return `Bus ${leg.line}`;
+  if(leg.mode==="SUBWAY"||leg.mode==="RAIL"||leg.mode==="METRO") return MRT_COLORS[leg.line]?`${leg.line} line`:`${leg.line} LRT`;
+  return leg.line||leg.mode;
+}
+
+// Public transport (bus + MRT/LRT) from Transitous, a free community router
+// that uses LTA's timetables. Returns up to 4 itineraries:
+// {duration, start, end, transfers, walk (m), legs:[{mode, line, headsign,
+//  from:{name,code,lat,lng}, to:{...}, start, end, stops, distance, path}]}
+async function loadTransitRoutes(from,to){
+  const params=new URLSearchParams({fromPlace:`${from.lat},${from.lng}`,toPlace:`${to.lat},${to.lng}`,time:new Date().toISOString(),numItineraries:"5"});
+  const data=await getJSON(`https://api.transitous.org/api/v5/plan?${params}`);
+  // MRT station names come in capitals ("KENT RIDGE"); show them as "Kent Ridge".
+  const tidy=n=>n===n.toUpperCase()?n.toLowerCase().replace(/\b[a-z]/g,c=>c.toUpperCase()):n;
+  const place=p=>({name:p.name==="START"?"your location":p.name==="END"?"your destination":tidy(p.name),code:p.stopCode||"",lat:p.lat,lng:p.lon});
+  const seen=new Set();
+  return (data?.itineraries||[]).map(it=>{
+    const legs=it.legs.map(l=>({
+      mode:l.mode, line:l.routeShortName||l.displayName||"", headsign:tidy(l.headsign||""),
+      from:place(l.from), to:place(l.to),
+      start:new Date(l.startTime), end:new Date(l.endTime),
+      stops:(l.intermediateStops||[]).length+1, distance:l.distance||0, duration:l.duration,
+      path:l.legGeometry?.points?decodePolyline(l.legGeometry.points,l.legGeometry.precision||6):[]
+    }));
+    return {duration:it.duration,start:new Date(it.startTime),end:new Date(it.endTime),transfers:it.transfers,
+      walk:legs.filter(l=>l.mode==="WALK").reduce((n,l)=>n+l.distance,0),legs};
+  }).filter(it=>{
+    if(!it.legs.some(l=>l.mode!=="WALK")) return false;
+    const key=it.legs.filter(l=>l.mode!=="WALK").map(l=>l.line).join(">");
+    if(seen.has(key)) return false;
+    seen.add(key); return true;
+  }).sort((a,b)=>a.end-b.end).slice(0,4);
 }
 
 function stepText(s){
@@ -169,6 +231,7 @@ function stepText(s){
 }
 
 function walkMinutes(seconds){ return Math.max(1,Math.round(seconds/60)); }
+function clockTime(d){ return d.toLocaleTimeString("en-SG",{hour:"numeric",minute:"2-digit"}); }
 
 // A shuttle ride between the stops nearest to each end, if one helps.
 // Services that call at both stops connect them; times come from live data.
