@@ -5,7 +5,7 @@
 
 views.map=(()=>{
   let el=null, map=null, ready=false;
-  let nusMarkers=new Map(), publicLayer=null, pinMarker=null, meMarker=null, watchId=null;
+  let nusMarkers=new Map(), nusLayer=null, publicLayer=null, pinMarker=null, meMarker=null, watchId=null;
   let selected=null, refreshTimer=null, searchTimer=null, pendingParams=null, routeLayer=null;
 
   /* ---------- Markers ---------- */
@@ -21,23 +21,55 @@ views.map=(()=>{
       maxZoom:19,
       attribution:'© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
     }).addTo(map);
-    publicLayer=L.layerGroup().addTo(map);
+    publicLayer=L.layerGroup();
+    nusLayer=L.layerGroup();
+    applyLayers();
 
     for(const s of NUS_STOPS){
-      const m=L.marker([s.lat,s.lng],{icon:nusIcon(),title:s.name,zIndexOffset:500}).addTo(map);
+      const m=L.marker([s.lat,s.lng],{icon:nusIcon(),title:s.name,zIndexOffset:500}).addTo(nusLayer);
       m.on("click",()=>selectStop(s));
       nusMarkers.set(s.code,m);
     }
     map.on("moveend",renderPublicStops);
-    map.on("click",()=>{ hideResults(); });
+    map.on("click",()=>{ hideResults(); $("#layersMenu",el).hidden=true; });
     loadPublicStops().then(renderPublicStops);
     ready=true;
+  }
+
+  /* ---------- Layers ---------- */
+
+  function layerPrefs(){
+    try{ return {nus:true,public:true,...JSON.parse(localStorage.getItem("nus_map_layers")||"{}")}; }
+    catch{ return {nus:true,public:true}; }
+  }
+
+  function applyLayers(){
+    const prefs=layerPrefs();
+    prefs.nus?nusLayer.addTo(map):nusLayer.remove();
+    prefs.public?publicLayer.addTo(map):publicLayer.remove();
+    $("#layersBtn",el)?.classList.toggle("dim",!prefs.nus&&!prefs.public);
+  }
+
+  function toggleLayersMenu(){
+    const menu=$("#layersMenu",el);
+    if(!menu.hidden){ menu.hidden=true; return; }
+    const prefs=layerPrefs();
+    menu.innerHTML=`<p class="kicker">SHOW ON MAP</p>
+      <button class="layer-row" data-layer="nus"><span class="mk-nus small"></span><span>NUS shuttle stops</span><span class="switch ${prefs.nus?"on":""}"></span></button>
+      <button class="layer-row" data-layer="public"><span class="mk-public"></span><span>Public bus stops</span><span class="switch ${prefs.public?"on":""}"></span></button>`;
+    menu.hidden=false;
+    $$("[data-layer]",menu).forEach(b=>b.onclick=()=>{
+      const next=layerPrefs(); next[b.dataset.layer]=!next[b.dataset.layer];
+      localStorage.setItem("nus_map_layers",JSON.stringify(next));
+      $(".switch",b).classList.toggle("on",next[b.dataset.layer]);
+      applyLayers();
+    });
   }
 
   // Public stops only when zoomed in, so the map stays readable.
   async function renderPublicStops(){
     publicLayer.clearLayers();
-    if(map.getZoom()<16) return;
+    if(map.getZoom()<16 || !layerPrefs().public) return;
     const bounds=map.getBounds().pad(0.1);
     for(const s of await loadPublicStops()){
       if(!bounds.contains([s.lat,s.lng])) continue;
@@ -57,12 +89,45 @@ views.map=(()=>{
 
   /* ---------- Panel ---------- */
 
-  function openPanel(html){
+  function openPanel(html,{directions=false}={}){
     const p=$("#mapPanel",el);
-    p.innerHTML=`<div class="sheet-grabber"></div><button class="panel-close" aria-label="Close">${icon("M6 6l12 12M18 6 6 18",18)}</button>${html}`;
+    p.classList.toggle("directions",directions);
+    p.innerHTML=`<button class="panel-handle" aria-label="Collapse or expand"><span class="sheet-grabber"></span></button><button class="panel-close" aria-label="Close">${icon("M6 6l12 12M18 6 6 18",18)}</button>${html}`;
     p.hidden=false;
+    p.classList.remove("collapsed");
     el.classList.add("panel-open");
+    el.classList.remove("panel-collapsed");
     $(".panel-close",p).onclick=closePanel;
+    $(".panel-handle",p).onclick=()=>setCollapsed(!p.classList.contains("collapsed"));
+  }
+
+  // Collapsing shrinks the panel to its title (and trip summary) so the whole
+  // map is visible; drag the top of the panel or tap the handle to toggle.
+  function setCollapsed(on){
+    const p=$("#mapPanel",el);
+    if(p.hidden) return;
+    p.classList.toggle("collapsed",on);
+    el.classList.toggle("panel-collapsed",on);
+    p.scrollTop=0;
+    setTimeout(()=>{ if(routeLayer) fitRouteToPanel(); },60);
+  }
+
+  function enablePanelDrag(){
+    const p=$("#mapPanel",el);
+    let startY=null, fromTop=false;
+    p.addEventListener("touchstart",e=>{
+      startY=e.touches[0].clientY;
+      // Drag from the panel's top area, or anywhere when the panel is scrolled to the top.
+      fromTop=e.touches[0].clientY-p.getBoundingClientRect().top<90 || p.scrollTop<=0;
+    },{passive:true});
+    p.addEventListener("touchend",e=>{
+      if(startY==null) return;
+      const dy=e.changedTouches[0].clientY-startY;
+      startY=null;
+      if(!fromTop) return;
+      if(dy>50 && !p.classList.contains("collapsed")) setCollapsed(true);
+      else if(dy<-40 && p.classList.contains("collapsed")) setCollapsed(false);
+    },{passive:true});
   }
 
   // Centre a point in the part of the map the panel doesn't cover.
@@ -75,6 +140,7 @@ views.map=(()=>{
 
   function clearRoute(){
     if(routeLayer){ routeLayer.remove(); routeLayer=null; }
+    el.classList.remove("routing");
   }
 
   function closePanel(){
@@ -112,13 +178,14 @@ views.map=(()=>{
 
   function legIcon(leg){
     if(leg.mode==="WALK") return MODE_ICONS.walk;
-    if(leg.mode==="BUS") return MODE_ICONS.transit;
+    if(leg.mode==="BUS"||leg.mode==="SHUTTLE") return MODE_ICONS.transit;
     return "M8 3h8a4 4 0 0 1 4 4v8a3 3 0 0 1-3 3H7a3 3 0 0 1-3-3V7a4 4 0 0 1 4-4zM4 11h16M8 15h.01M16 15h.01M8 21l2-3M16 21l-2-3";
   }
 
   function drawPath(layers,fit=true){
     clearRoute();
     routeLayer=L.layerGroup(layers).addTo(map);
+    el.classList.add("routing");
     if(fit) fitRouteToPanel();
   }
 
@@ -130,20 +197,22 @@ views.map=(()=>{
     if(!pts.length) return;
     const wide=matchMedia("(min-width:900px)").matches;
     const panelH=$("#mapPanel",el).offsetHeight;
-    map.fitBounds(L.latLngBounds(pts),{paddingTopLeft:[wide?460:30,150],paddingBottomRight:[30,wide?40:panelH+30]});
+    map.fitBounds(L.latLngBounds(pts),{paddingTopLeft:[wide?460:40,wide?40:125],paddingBottomRight:[40,wide?40:panelH+20],maxZoom:18});
   }
 
-  // Directions with Transit (bus + MRT), Walk, Cycle and Drive. All modes load
-  // together so each tab shows its time; the route is drawn on this map.
+  // Directions with Transit (NUS shuttle, bus, MRT), Walk, Cycle and Drive.
+  // Every mode loads at once and each result appears as soon as it arrives.
   async function showRoute(dest){
     clearInterval(refreshTimer);
     clearRoute();
     const back=()=>dest.type==="nus"||dest.type==="public"?selectStop(dest):selectPlace(dest);
     const title=dest.type==="public"||dest.type==="nus"?dest.name:dest.code;
     openPanel(`<p class="kicker">DIRECTIONS</p><h2>${esc(title)}</h2>
+      <p class="peek" id="routePeek"></p>
       <div class="mode-tabs" id="modeTabs">${Object.keys(MODE_LABELS).map(m=>`<button data-mode="${m}">${icon(MODE_ICONS[m],18)}<span>${MODE_LABELS[m]}</span><small>…</small></button>`).join("")}</div>
-      <div id="routeBody"><div class="empty-inline"><span class="spinner sm"></span>Finding routes…</div></div>`);
+      <div id="routeBody"><div class="empty-inline"><span class="spinner sm"></span>Getting your location…</div></div>`,{directions:true});
     $$("#modeTabs button",el).forEach(b=>b.onclick=()=>pick(b.dataset.mode));
+    const peek=text=>{ const p=$("#routePeek",el); if(p) p.textContent=text; };
 
     let from;
     try{ from=await getPosition({fresh:true}); startLocation(); }
@@ -153,33 +222,41 @@ views.map=(()=>{
       return;
     }
     if(selected!==dest) return;
+    $("#routeBody",el).innerHTML=`<div class="empty-inline"><span class="spinner sm"></span>Finding routes…</div>`;
 
     const straight=distanceM(from,dest);
-    const results={
-      transit:Promise.all([loadTransitRoutes(from,dest).catch(()=>[]),straight>400?shuttleOption(from,dest):null]),
-      walk:loadStreetRoute("walk",from,dest),
-      cycle:loadStreetRoute("cycle",from,dest),
-      drive:loadStreetRoute("drive",from,dest)
+    const transit={shuttle:null,public:null};   // null = still loading
+    const street={};
+    const settle=(m,v)=>{ street[m]=v; };
+    const jobs={
+      shuttle:planShuttleTrips(from,dest).catch(()=>[]).then(v=>{ transit.shuttle=v; onTransit(); }),
+      public:loadTransitRoutes(from,dest).catch(()=>[]).then(v=>{ transit.public=v; onTransit(); })
     };
-    for(const [m,pr] of Object.entries(results)){
-      pr.then(r=>{
-        const tab=$(`#modeTabs [data-mode="${m}"] small`,el); if(!tab) return;
-        if(m==="transit"){ const [its,sh]=r; const best=Math.min(...its.map(i=>i.duration),sh?Infinity:Infinity); tab.textContent=its.length?`${walkMinutes(best)} min`:sh?"Shuttle":"–"; }
-        else tab.textContent=`${walkMinutes(r.duration)} min`;
-      }).catch(()=>{ const tab=$(`#modeTabs [data-mode="${m}"] small`,el); if(tab) tab.textContent="–"; });
+    for(const m of ["walk","cycle","drive"]){
+      street[m]=loadStreetRoute(m,from,dest).then(r=>{ settle(m,r); setTab(m,`${walkMinutes(r.duration)} min`); if(current===m) pick(m); return r; })
+        .catch(()=>{ settle(m,false); setTab(m,"–"); if(current===m) pick(m); return false; });
     }
 
-    let current=null;
-    async function pick(mode){
-      current=mode;
+    function setTab(m,text){ const t=$(`#modeTabs [data-mode="${m}"] small`,el); if(t) t.textContent=text; }
+    function transitTrips(){ return [...(transit.shuttle||[]),...(transit.public||[])].sort((a,b)=>a.end-b.end); }
+    function onTransit(){
+      const trips=transitTrips(), done=transit.shuttle!=null&&transit.public!=null;
+      setTab("transit",trips.length?`${walkMinutes(Math.min(...trips.map(t=>t.duration)))} min`:done?"–":"…");
+      if(current==="transit" && view==="list") renderTransitList();
+    }
+
+    let current=null, view="list";
+    function pick(mode){
+      current=mode; view="list";
       $$("#modeTabs button",el).forEach(b=>b.classList.toggle("on",b.dataset.mode===mode));
-      $("#routeBody",el).innerHTML=`<div class="empty-inline"><span class="spinner sm"></span>Finding ${MODE_LABELS[mode].toLowerCase()} routes…</div>`;
-      let r;
-      try{ r=await results[mode]; }catch{ r=null; }
-      if(current!==mode || selected!==dest) return;
-      if(mode==="transit") renderTransitList(r[0],r[1]);
-      else if(r) renderStreet(mode,r);
-      else $("#routeBody",el).innerHTML=`<div class="empty-inline">No ${MODE_LABELS[mode].toLowerCase()} route found.</div>`;
+      if(mode==="transit") return renderTransitList();
+      const r=street[mode];
+      if(r instanceof Promise||r==null){
+        $("#routeBody",el).innerHTML=`<div class="empty-inline"><span class="spinner sm"></span>Finding ${MODE_LABELS[mode].toLowerCase()} route…</div>`;
+        return;
+      }
+      if(r) renderStreet(mode,r);
+      else{ $("#routeBody",el).innerHTML=`<div class="empty-inline">No ${MODE_LABELS[mode].toLowerCase()} route found.</div>${footer()}`; bindFooter(); clearRoute(); }
     }
 
     function footer(){
@@ -192,6 +269,7 @@ views.map=(()=>{
 
     function renderStreet(mode,route){
       const arrive=clockTime(new Date(Date.now()+route.duration*1000));
+      peek(`${MODE_LABELS[mode]} · ${walkMinutes(route.duration)} min · ${distanceLabel(route.distance)} · arrive ${arrive}`);
       $("#routeBody",el).innerHTML=`
         <div class="route-summary"><b>${walkMinutes(route.duration)} min</b><span>${distanceLabel(route.distance)} · arrive ${arrive}</span></div>
         <details class="route-steps"><summary>Step-by-step (${route.steps.length})</summary>
@@ -212,32 +290,36 @@ views.map=(()=>{
         :`<span class="leg-chip" style="--c:${lineColor(l)}">${icon(legIcon(l),13)}${esc(l.line)}</span>`).join(`<span class="leg-sep">›</span>`);
     }
 
-    function renderTransitList(its,shuttle){
-      const shuttleCard=shuttle?`<button class="route-card" id="shuttleCard">
-          <div class="route-card-top"><b>NUS shuttle</b><span class="pill live">Live</span></div>
-          <div class="route-legs"><span class="leg-chip walk">${icon(MODE_ICONS.walk,13)}${walkMinutes(shuttle.from.distance/1.3)}</span><span class="leg-sep">›</span>${shuttle.services.slice(0,3).map(sv=>`<span class="leg-chip" style="--c:#ef4444">${esc(sv.service)}</span>`).join("")}</div>
-          <small>From ${esc(shuttle.from.name)} · next ${shuttle.services[0].next==null?"–":shuttle.services[0].next<=0?"arriving":`in ${shuttle.services[0].next} min`}</small>
-        </button>`:"";
-      if(!its.length && !shuttle){
-        $("#routeBody",el).innerHTML=`<div class="empty-inline">No public transport routes found right now. Try Walk or Drive.</div>${footer()}`;
+    function liveText(it){
+      const l=it.live, m=l.next;
+      return `${l.service} ${m<=0?"arriving now":`in ${m} min`} at ${NUS_STOPS.find(s=>s.code===l.stop)?.name||l.stop}`;
+    }
+
+    function renderTransitList(){
+      const its=transitTrips(), loading=transit.shuttle==null||transit.public==null;
+      if(!its.length && !loading){
+        peek("No public transport found");
+        $("#routeBody",el).innerHTML=`<div class="empty-inline">No shuttle, bus or MRT routes found right now. Try Walk or Drive.</div>${footer()}`;
         bindFooter(); clearRoute(); return;
       }
-      $("#routeBody",el).innerHTML=`${shuttleCard}${its.map((it,i)=>`
+      if(its[0]) peek(`Transit · ${walkMinutes(its[0].duration)} min · arrive ${clockTime(its[0].end)}`);
+      $("#routeBody",el).innerHTML=`${its.map((it,i)=>`
         <button class="route-card" data-i="${i}">
-          <div class="route-card-top"><b>${walkMinutes(it.duration)} min</b><span>${clockTime(it.start)} – ${clockTime(it.end)}</span></div>
+          <div class="route-card-top"><b>${walkMinutes(it.duration)} min</b>${it.shuttle?`<span class="pill live">Live</span>`:`<span>${clockTime(it.start)} – ${clockTime(it.end)}</span>`}</div>
           <div class="route-legs">${legChips(it)}</div>
-          <small>${it.transfers?`${it.transfers} transfer${it.transfers===1?"":"s"} · `:""}${distanceLabel(it.walk)} walking</small>
+          <small>${it.shuttle?`NUS shuttle · ${esc(liveText(it))}`:`${it.transfers?`${it.transfers} transfer${it.transfers===1?"":"s"} · `:""}${distanceLabel(it.walk)} walking`}</small>
         </button>`).join("")}
-        <p class="small-help">Bus and MRT times are from LTA timetables via Transitous. Live bus arrivals show in each route's steps.</p>
+        ${loading?`<div class="empty-inline"><span class="spinner sm"></span>${its.length?"Looking for more routes…":"Finding shuttle, bus and MRT routes…"}</div>`:""}
+        <p class="small-help">NUS shuttle times are live. Bus and MRT times are from LTA timetables (via Transitous); the first bus in a route shows its live arrival.</p>
         ${footer()}`;
       bindFooter();
-      $$(".route-card[data-i]",el).forEach(b=>b.onclick=()=>renderTransitDetail(its[+b.dataset.i],its,shuttle));
-      $("#shuttleCard",el)?.addEventListener("click",()=>selectStop(shuttle.from));
-      // Preview the first option on the map.
+      $$(".route-card[data-i]",el).forEach(b=>b.onclick=()=>renderTransitDetail(its[+b.dataset.i]));
       if(its[0]) drawTransit(its[0]);
     }
 
-    function drawTransit(it){
+    let drawn=null;
+    function drawTransit(it,{refit=true}={}){
+      drawn=it;
       const layers=[];
       for(const l of it.legs){
         if(!l.path.length) continue;
@@ -249,39 +331,49 @@ views.map=(()=>{
           layers.push(L.circleMarker([l.to.lat,l.to.lng],{radius:6,color:"#fff",weight:2,fillColor:lineColor(l),fillOpacity:1}));
         }
       }
-      drawPath(layers);
+      drawPath(layers,refit);
+      // Shuttle trips start as straight lines between stops; swap in road paths.
+      const pending=it.legs.filter(l=>l.needsPath);
+      if(pending.length) Promise.all(pending.map(loadLegPath)).then(()=>{ if(drawn===it && selected===dest) drawTransit(it,{refit:false}); });
     }
 
-    async function renderTransitDetail(it,its,shuttle){
-      const first=it.legs.find(l=>l.mode==="BUS");
+    async function renderTransitDetail(it){
+      view="detail";
+      const first=it.legs.find(l=>l.mode==="BUS"||l.mode==="SHUTTLE");
+      peek(`${first?transitLabel(first):"Transit"} · ${walkMinutes(it.duration)} min · arrive ${clockTime(it.end)}`);
       $("#routeBody",el).innerHTML=`
         <button class="link" id="routeOptions">‹ All routes</button>
-        <div class="route-summary"><b>${walkMinutes(it.duration)} min</b><span>${clockTime(it.start)} – ${clockTime(it.end)}</span></div>
+        <div class="route-summary"><b>${walkMinutes(it.duration)} min</b><span>arrive around ${clockTime(it.end)}</span></div>
         <ol class="itinerary">${it.legs.map(l=>{
           if(l.mode==="WALK") return l.distance<20?"":`<li class="it-walk"><span class="it-dot walk">${icon(MODE_ICONS.walk,14)}</span><div><b>Walk ${distanceLabel(l.distance)}</b><small>to ${esc(l.to.name)} · ${walkMinutes(l.duration)} min</small></div></li>`;
           return `<li style="--c:${lineColor(l)}"><span class="it-dot">${icon(legIcon(l),14)}</span><div>
             <b>${esc(transitLabel(l))}</b>${l.headsign?`<small>towards ${esc(l.headsign)}</small>`:""}
-            <small>Board at <b>${esc(l.from.name)}</b>${l.from.code&&l.mode==="BUS"?` (${esc(l.from.code)})`:""} · ${clockTime(l.start)}</small>
+            <small>Board at <b>${esc(l.from.name)}</b>${l.from.code&&l.mode==="BUS"?` (${esc(l.from.code)})`:""}${l.mode==="SHUTTLE"?"":` · ${clockTime(l.start)}`}</small>
             ${l===first?`<div class="live-next" id="liveNext"><span class="spinner sm"></span>Checking live arrival…</div>`:""}
-            <small>${l.stops} stop${l.stops===1?"":"s"} · alight at <b>${esc(l.to.name)}</b> · ${clockTime(l.end)}</small>
+            <small>${l.stops} stop${l.stops===1?"":"s"}${l.via?.length?` (via ${esc(l.via.join(", "))})`:""} · get off at <b>${esc(l.to.name)}</b></small>
           </div></li>`;
         }).join("")}
-        <li class="it-end"><span class="it-dot end">${icon("M12 21s-7-6.2-7-11.5a7 7 0 0 1 14 0C19 14.8 12 21 12 21z",14)}</span><div><b>Arrive at ${esc(title)}</b><small>${clockTime(it.end)}</small></div></li>
+        <li class="it-end"><span class="it-dot end">${icon("M12 21s-7-6.2-7-11.5a7 7 0 0 1 14 0C19 14.8 12 21 12 21z",14)}</span><div><b>Arrive at ${esc(title)}</b><small>around ${clockTime(it.end)}</small></div></li>
         </ol>${footer()}`;
       bindFooter();
-      $("#routeOptions",el).onclick=()=>renderTransitList(its,shuttle);
+      $("#routeOptions",el).onclick=()=>{ view="list"; renderTransitList(); };
       drawTransit(it);
-      if(first?.from.code){
+      const showLive=async()=>{
+        if(!first?.from.code) return;
         try{
-          const live=(await loadPublicArrivals(first.from.code)).find(x=>String(x.service)===String(first.line));
+          const rows=first.mode==="SHUTTLE"?await loadShuttleArrivals(first.from.code):await loadPublicArrivals(first.from.code);
+          const live=rows.find(x=>String(x.service)===String(first.line));
           const box=$("#liveNext",el); if(!box) return;
-          box.innerHTML=live?`<span class="pill live">Live</span> Next ${esc(first.line)} ${live.next==null?"–":live.next<=0?"arriving now":`in ${live.next} min`}${live.then!=null?`, then ${live.then} min`:""}`
-            :`No live data for bus ${esc(first.line)} right now.`;
+          box.innerHTML=live&&live.next!=null?`<span class="pill live">Live</span> Next ${esc(first.line)} ${live.next<=0?"arriving now":`in ${live.next} min`}${live.then!=null?`, then ${live.then<=0?"arriving":`${live.then} min`}`:""}`
+            :`No live data for ${esc(first.line)} right now.`;
         }catch{ const box=$("#liveNext",el); if(box) box.textContent="Live arrival unavailable."; }
-      }
+      };
+      showLive();
+      clearInterval(refreshTimer);
+      refreshTimer=setInterval(()=>{ if(view==="detail" && activeView==="map" && !document.hidden) showLive(); },30000);
     }
 
-    pick(straight>1000?"transit":"walk");
+    pick(straight>1000||distanceM(from,dest)>600?"transit":"walk");
   }
 
   async function selectStop(stop){
@@ -298,28 +390,30 @@ views.map=(()=>{
       pinMarker=L.marker([stop.lat,stop.lng],{icon:pinIcon(),zIndexOffset:1000}).addTo(map);
     }
     // A shuttle stop next to a public stop (or vice versa) shows both boards.
-    const twin=stop.type==="nus" ? await publicStopNear(stop) : NUS_STOPS.find(n=>distanceM(n,stop)<45);
-    const boardsHTML=()=>Promise.all([arrivalsHTML(stop),twin?arrivalsHTML(twin):""]);
+    // The public stop catalogue can take a moment, so it fills in afterwards.
+    let twin=stop.type==="nus" ? null : NUS_STOPS.find(n=>distanceM(n,stop)<45);
 
     openPanel(`<p class="kicker">${stop.type==="nus"?"NUS SHUTTLE STOP":`BUS STOP ${esc(stop.code)}`}</p>
       <div class="panel-title"><h2>${esc(stop.name)}</h2><button class="icon-btn sm" id="refreshEta" aria-label="Refresh">${icon("M21 12a9 9 0 1 1-3-6.7L21 8M21 3v5h-5",18)}</button></div>
       <p class="subtle">${[stop.type==="public"&&stop.road?esc(stop.road):"",distanceText(stop).replace(/^ · /,"")].filter(Boolean).join(" · ")}</p>
       ${walkButton()}
       <div id="etaMain"><div class="empty-inline"><span class="spinner sm"></span>Loading live times…</div></div>
-      ${twin?`<h4 class="sub-head">${twin.type==="nus"?"NUS shuttles here":"Public buses here"}<small>${esc(twin.type==="nus"?twin.name:`${twin.name} · ${twin.code}`)}</small></h4><div id="etaTwin"></div>`:""}
+      <div id="twinBox"></div>
       <p class="updated" id="etaUpdated"></p>`);
     $("#walkHere",el).onclick=()=>showRoute(stop);
 
     focusOn(stop,Math.max(map.getZoom(),17));
+    const twinHead=()=>twin?`<h4 class="sub-head">${twin.type==="nus"?"NUS shuttles here":"Public buses here"}<small>${esc(twin.type==="nus"?twin.name:`${twin.name} · ${twin.code}`)}</small></h4>`:"";
     const load=async()=>{
-      const [main,other]=await boardsHTML();
+      const [main,other]=await Promise.all([arrivalsHTML(stop),twin?arrivalsHTML(twin):""]);
       if(selected!==stop) return;
       $("#etaMain",el).innerHTML=main;
-      if(twin) $("#etaTwin",el).innerHTML=other;
+      $("#twinBox",el).innerHTML=twin?twinHead()+other:"";
       $("#etaUpdated",el).textContent=`Updated ${new Date().toLocaleTimeString("en-SG",{hour:"numeric",minute:"2-digit"})} · refreshes automatically`;
     };
     $("#refreshEta",el).onclick=load;
     load();
+    if(stop.type==="nus") publicStopNear(stop).then(t=>{ if(t && selected===stop){ twin=t; load(); } });
     refreshTimer=setInterval(()=>{ if(activeView==="map"&&!document.hidden) load(); },30000);
   }
 
@@ -439,6 +533,8 @@ views.map=(()=>{
           ${["UTOWN","CLB","KR-MRT","COM3"].map(c=>`<button class="chip solid" data-stop="${c}">${esc(NUS_STOPS.find(s=>s.code===c).name)}</button>`).join("")}
         </div>
       </div>
+      <button class="map-fab layers" id="layersBtn" aria-label="Map layers">${icon("M12 2 2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5",22)}</button>
+      <div class="layers-menu" id="layersMenu" hidden></div>
       <button class="map-fab" id="locateMe" aria-label="My location">${icon("M12 2v3M12 19v3M2 12h3M19 12h3M12 18a6 6 0 1 0 0-12 6 6 0 0 0 0 12z",22)}</button>
       <div class="map-panel" id="mapPanel" hidden></div>`;
 
@@ -464,6 +560,8 @@ views.map=(()=>{
     });
     $("#mapClear",el).onclick=()=>{ input.value=""; $("#mapClear",el).hidden=true; hideResults(); input.focus(); };
     $("#chipNearby",el).onclick=showNearby;
+    $("#layersBtn",el).onclick=toggleLayersMenu;
+    enablePanelDrag();
     $$("[data-stop]",el).forEach(b=>b.onclick=()=>selectStop(NUS_STOPS.find(s=>s.code===b.dataset.stop)));
     $("#locateMe",el).onclick=async()=>{
       try{

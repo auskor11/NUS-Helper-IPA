@@ -27,16 +27,23 @@ function nearestNusStops(pos,n=3){
 
 // Some live-data APIs don't send CORS headers. Inside the iOS app we can call
 // them natively instead; in a browser those calls fail and callers fall back.
-async function getJSON(url,{native=false}={}){
+// Every request gives up after `timeout` ms so the UI never waits forever.
+async function getJSON(url,{native=false,timeout=12000}={}){
   const http=window.Capacitor?.Plugins?.CapacitorHttp;
   if(native && isNativeApp() && http){
-    const r=await http.get({url,headers:{Accept:"application/json"}});
+    const r=await http.get({url,headers:{Accept:"application/json"},connectTimeout:timeout,readTimeout:timeout});
     if(r.status<200||r.status>=300) throw new Error(`Request failed (${r.status})`);
     return typeof r.data==="string" ? JSON.parse(r.data) : r.data;
   }
-  const r=await fetch(url,{headers:{Accept:"application/json"},cache:"no-store"});
-  if(!r.ok) throw new Error(`Request failed (${r.status})`);
-  return r.json();
+  const ctrl=new AbortController();
+  const timer=setTimeout(()=>ctrl.abort(),timeout);
+  try{
+    const r=await fetch(url,{headers:{Accept:"application/json"},cache:"no-store",signal:ctrl.signal});
+    if(!r.ok) throw new Error(`Request failed (${r.status})`);
+    return await r.json();
+  }catch(err){
+    throw err.name==="AbortError" ? new Error("The request took too long.") : err;
+  }finally{ clearTimeout(timer); }
 }
 
 /* ---------- Live arrivals ---------- */
@@ -122,20 +129,21 @@ async function publicStopNear(pos,maxM=45){
 /* ---------- Location ---------- */
 
 let lastPosition=null;
-// The map keeps lastPosition up to date while it's open, so a recent fix is
-// reused; if a new reading is slow, fall back to one from the last 5 minutes.
+// The map keeps lastPosition up to date while it's open, so a fix from the
+// last two minutes is used straight away. Otherwise ask for one, accepting a
+// cached reading, and fall back to anything from the last 10 minutes.
 function getPosition({fresh=false}={}){
   const age=lastPosition?Date.now()-lastPosition.at:Infinity;
-  if(age<(fresh?20000:60000)) return Promise.resolve(lastPosition);
+  if(age<(fresh?120000:300000)) return Promise.resolve(lastPosition);
   return new Promise((resolve,reject)=>{
     if(!navigator.geolocation) return reject(new Error("Location isn't available on this device."));
     navigator.geolocation.getCurrentPosition(p=>{
       lastPosition={lat:p.coords.latitude,lng:p.coords.longitude,accuracy:p.coords.accuracy,at:Date.now()};
       resolve(lastPosition);
     },err=>{
-      if(err.code!==1 && lastPosition && Date.now()-lastPosition.at<300000) return resolve(lastPosition);
+      if(err.code!==1 && lastPosition && Date.now()-lastPosition.at<600000) return resolve(lastPosition);
       reject(new Error(err.code===1?"Location permission is off.":"Couldn't get your location."));
-    },{enableHighAccuracy:true,timeout:10000,maximumAge:30000});
+    },{enableHighAccuracy:true,timeout:6000,maximumAge:60000});
   });
 }
 
@@ -175,13 +183,16 @@ function decodePolyline(str,precision=6){
 }
 
 const MRT_COLORS={EW:"#009645",CG:"#009645",NS:"#d42e12",NE:"#9900aa",CC:"#fa9e0d",CE:"#fa9e0d",DT:"#005ec4",TE:"#9d5b25"};
+const SHUTTLE_COLORS={A1:"#ef4444",A2:"#f59e0b",D1:"#8b5cf6",D2:"#7c3aed",K:"#2563eb",P:"#0ea5e9",R1:"#ec4899",R2:"#db2777"};
 function lineColor(leg){
   if(leg.mode==="WALK") return "#8b93a5";
+  if(leg.mode==="SHUTTLE") return SHUTTLE_COLORS[leg.line]||"#ef4444";
   if(leg.mode==="BUS") return "#16a34a";
   return MRT_COLORS[leg.line] || "#748477"; // LRT and anything else
 }
 
 function transitLabel(leg){
+  if(leg.mode==="SHUTTLE") return `NUS shuttle ${leg.line}`;
   if(leg.mode==="BUS") return `Bus ${leg.line}`;
   if(leg.mode==="SUBWAY"||leg.mode==="RAIL"||leg.mode==="METRO") return MRT_COLORS[leg.line]?`${leg.line} line`:`${leg.line} LRT`;
   return leg.line||leg.mode;
@@ -233,19 +244,116 @@ function stepText(s){
 function walkMinutes(seconds){ return Math.max(1,Math.round(seconds/60)); }
 function clockTime(d){ return d.toLocaleTimeString("en-SG",{hour:"numeric",minute:"2-digit"}); }
 
-// A shuttle ride between the stops nearest to each end, if one helps.
-// Services that call at both stops connect them; times come from live data.
-async function shuttleOption(from,to){
-  const [a]=nearestNusStops(from,1), [b]=nearestNusStops(to,1);
-  if(!a||!b||a.code===b.code) return null;
-  const total=distanceM(from,to);
-  if(total<500 || a.distance+b.distance>total*0.7) return null;
+/* ---------- NUS shuttle trips ---------- */
+
+// Stop order for each NUS shuttle service (from NUS NextBus). Routes that
+// start and end at the same stop are loops.
+const SHUTTLE_ROUTES={
+  A1:["KRB","LT13","AS5","BIZ2","TCOMS-OPP","PGP","KR-MRT","LT27","UHALL","UHC-OPP","YIH","CLB","KRB"],
+  A2:["KRB","IT","YIH-OPP","MUSEUM","UHC","UHALL-OPP","S17","KR-MRT-OPP","PGPR","TCOMS","HSSML-OPP","NUSS-OPP","LT13-OPP","KRB"],
+  D1:["COM3","HSSML-OPP","NUSS-OPP","LT13-OPP","IT","YIH-OPP","MUSEUM","UTOWN","YIH","CLB","LT13","AS5","BIZ2","COM3"],
+  D2:["COM3","TCOMS-OPP","PGP","KR-MRT","LT27","UHALL","UHC-OPP","MUSEUM","UTOWN","UHC","UHALL-OPP","S17","KR-MRT-OPP","PGPR","TCOMS","COM3"],
+  K:["PGP","KR-MRT","LT27","UHALL","UHC-OPP","YIH","CLB","SDE3-OPP","JP-SCH-16151","KV","MUSEUM","UHC","UHALL-OPP","S17","KR-MRT-OPP","PGPR"],
+  P:["KV","CG","OTH","BG-MRT","KR-MRT","UHC-OPP","UTOWN","KV"],
+  R1:["KV","MUSEUM","UTOWN","YIH","CLB","LT13","AS5","BIZ2","PGP"],
+  R2:["PGP","HSSML-OPP","NUSS-OPP","LT13-OPP","IT","YIH-OPP","UTOWN","RAFFLES","KV"]
+};
+
+// Shortest ride from stop a to stop b on each service, in travel direction.
+function shuttleRides(a,b){
+  const rides=[];
+  for(const [service,route] of Object.entries(SHUTTLE_ROUTES)){
+    const loop=route[0]===route[route.length-1];
+    const seq=loop?route.concat(route.slice(1)):route;
+    let best=null;
+    route.forEach((code,i)=>{
+      if(code!==a || (loop && i===route.length-1)) return;
+      const j=seq.indexOf(b,i+1);
+      if(j>i && (!best || j-i<best.length-1)) best=seq.slice(i,j+1);
+    });
+    if(best) rides.push({service,stops:best});
+  }
+  return rides;
+}
+
+const WALK_SPEED=1.25;   // m/s, allowing for paths not being straight
+const SECONDS_PER_STOP=100;
+
+// NUS shuttle journeys from `from` to `to`, built from live arrivals, in the
+// same shape as loadTransitRoutes() so both list and draw the same way.
+async function planShuttleTrips(from,to){
+  if(distanceM(from,to)<400) return [];
+  const near=p=>NUS_STOPS.map(s=>({...s,distance:distanceM(p,s)})).filter(s=>s.distance<=700).sort((x,y)=>x.distance-y.distance).slice(0,4);
+  const origins=near(from), dests=near(to);
+  const options=[];
+  for(const a of origins) for(const b of dests){
+    if(a.code===b.code) continue;
+    for(const ride of shuttleRides(a.code,b.code)){
+      options.push({a,b,ride,score:a.distance/WALK_SPEED+(ride.stops.length-1)*SECONDS_PER_STOP+b.distance/WALK_SPEED});
+    }
+  }
+  // Best option per service.
+  const best=new Map();
+  for(const o of options.sort((x,y)=>x.score-y.score)) if(!best.has(o.ride.service)) best.set(o.ride.service,o);
+  const picked=[...best.values()].slice(0,4);
+  if(!picked.length) return [];
+
+  const live=new Map();
+  await Promise.all([...new Set(picked.map(o=>o.a.code))].map(async code=>{
+    try{ live.set(code,await loadShuttleArrivals(code)); }catch{ live.set(code,[]); }
+  }));
+
+  const now=Date.now(), stopName=c=>NUS_STOPS.find(s=>s.code===c)?.name||c;
+  const trips=[];
+  for(const {a,b,ride} of picked){
+    const eta=(live.get(a.code)||[]).find(x=>x.service===ride.service);
+    if(!eta || eta.next==null) continue; // not running right now
+    const walk1=a.distance/WALK_SPEED, walk2=b.distance/WALK_SPEED;
+    // Catch the first bus you can reach on foot.
+    const catchable=[eta.next,eta.then].filter(m=>m!=null && m*60>=walk1-30);
+    const waitMin=catchable.length?catchable[0]:null;
+    if(waitMin==null) continue;
+    const board=now+Math.max(walk1,waitMin*60)*1000;
+    const rideSecs=(ride.stops.length-1)*SECONDS_PER_STOP;
+    const alight=board+rideSecs*1000;
+    const end=alight+walk2*1000;
+    const stopsPath=ride.stops.map(c=>{ const s=NUS_STOPS.find(x=>x.code===c); return [s.lat,s.lng]; });
+    trips.push({
+      shuttle:true, duration:(end-now)/1000, start:new Date(now), end:new Date(end), transfers:0, walk:a.distance+b.distance,
+      live:{service:ride.service,stop:a.code,next:eta.next,then:eta.then},
+      legs:[
+        {mode:"WALK",line:"",from:{name:"your location",lat:from.lat,lng:from.lng},to:{name:a.name,code:a.code,lat:a.lat,lng:a.lng},
+          start:new Date(now),end:new Date(now+walk1*1000),distance:a.distance,duration:walk1,path:[[from.lat,from.lng],[a.lat,a.lng]],needsPath:"walk"},
+        {mode:"SHUTTLE",line:ride.service,headsign:(r=>r[0]===r.at(-1)?"":stopName(r.at(-1)))(SHUTTLE_ROUTES[ride.service]),
+          from:{name:a.name,code:a.code,lat:a.lat,lng:a.lng},to:{name:b.name,code:b.code,lat:b.lat,lng:b.lng},
+          start:new Date(board),end:new Date(alight),stops:ride.stops.length-1,distance:0,duration:rideSecs,path:stopsPath,needsPath:"shuttle",
+          via:ride.stops.slice(1,-1).map(stopName)},
+        {mode:"WALK",line:"",from:{name:b.name,lat:b.lat,lng:b.lng},to:{name:"your destination",lat:to.lat,lng:to.lng},
+          start:new Date(alight),end:new Date(end),distance:b.distance,duration:walk2,path:[[b.lat,b.lng],[to.lat,to.lng]],needsPath:"walk"}
+      ]
+    });
+  }
+  return trips.sort((x,y)=>x.end-y.end);
+}
+
+// Replace a shuttle trip leg's straight-line preview with a road-following
+// path. Each leg is tried once; on failure the straight line stays.
+async function loadLegPath(leg){
+  const kind=leg.needsPath;
+  if(!kind) return leg.path;
+  leg.needsPath=null;
   try{
-    const [atA,atB]=await Promise.all([loadShuttleArrivals(a.code),loadShuttleArrivals(b.code)]);
-    const atBNames=new Set(atB.map(x=>x.service));
-    const services=atA.filter(x=>atBNames.has(x.service));
-    return services.length ? {from:a,to:b,services} : null;
-  }catch{ return null; }
+    if(kind==="walk"){
+      if(leg.distance<25) return leg.path;
+      const r=await loadStreetRoute("walk",{lat:leg.path[0][0],lng:leg.path[0][1]},{lat:leg.path.at(-1)[0],lng:leg.path.at(-1)[1]});
+      leg.path=r.path; leg.distance=r.distance;
+    }else{
+      const coords=leg.path.map(([lat,lng])=>`${lng},${lat}`).join(";");
+      const data=await getJSON(`https://routing.openstreetmap.de/routed-car/route/v1/driving/${coords}?overview=full&geometries=geojson`);
+      if(data?.routes?.[0]) leg.path=data.routes[0].geometry.coordinates.map(([lng,lat])=>[lat,lng]);
+    }
+  }catch(err){ console.warn("Route shape unavailable",err); }
+  return leg.path;
 }
 
 /* ---------- Venues ---------- */

@@ -293,7 +293,28 @@ select.input{background-image:linear-gradient(45deg,transparent 50%,var(--muted)
 .map-chips::-webkit-scrollbar,.quick-dates::-webkit-scrollbar{display:none}
 .chip.solid{background:var(--surface);box-shadow:0 2px 8px rgba(0,0,0,.18)}
 .map-fab{position:absolute;right:14px;bottom:20px;z-index:450;width:48px;height:48px;border-radius:14px;background:var(--surface);border:1px solid var(--line);display:grid;place-items:center;box-shadow:var(--shadow);color:var(--accent)}
-.view-map.panel-open .map-fab{display:none}
+.view-map.panel-open:not(.panel-collapsed) .map-fab{display:none}
+.view-map.panel-collapsed .map-fab{bottom:96px}
+.view-map.panel-collapsed .map-fab.layers{bottom:152px}
+.map-fab.layers{bottom:76px}
+.map-fab.dim{color:var(--muted)}
+.layers-menu{position:absolute;right:72px;bottom:20px;z-index:460;width:240px;background:var(--surface);border:1px solid var(--line);border-radius:16px;box-shadow:var(--shadow);padding:12px}
+.layers-menu .kicker{margin:2px 4px 6px}
+.layer-row{display:flex;align-items:center;gap:10px;width:100%;padding:10px 4px;font-size:14px;font-weight:600}
+.layer-row span:nth-child(2){flex:1}
+.mk-nus.small{width:18px;height:18px;border-width:2px;flex-shrink:0}
+.panel-handle{display:block;width:100%;padding:4px 0 6px;margin-top:-8px;touch-action:none}
+.panel-handle .sheet-grabber{margin:4px auto 6px}
+.peek{display:none;margin:4px 0 0;color:var(--muted);font-size:14px;font-weight:600}
+.map-panel.collapsed{max-height:none;overflow:hidden}
+.map-panel.directions:not(.collapsed){max-height:52%}
+/* While a route is shown, shuttle stops step back so the route stands out. */
+.view-map.routing .mk-nus{opacity:.35;transform:scale(.65)}
+.view-map.routing .mk-public{opacity:.3}
+.view-map.routing .map-chips{display:none}
+.map-panel.collapsed>:not(.panel-handle):not(.panel-close):not(.kicker):not(h2):not(.panel-title):not(.peek){display:none!important}
+.map-panel.collapsed .peek{display:block}
+.map-panel.collapsed h2{font-size:18px}
 .map-panel{position:absolute;left:0;right:0;bottom:0;z-index:600;background:var(--surface);border-radius:22px 22px 0 0;border-top:1px solid var(--line);box-shadow:0 -10px 30px rgba(0,0,0,.25);padding:8px 18px 18px;max-height:62%;overflow:auto;animation:up .22s ease}
 @keyframes up{from{transform:translateY(30px);opacity:.5}to{transform:none;opacity:1}}
 .panel-close{position:absolute;top:12px;right:12px;width:32px;height:32px;border-radius:50%;background:var(--surface2);display:grid;place-items:center;color:var(--muted)}
