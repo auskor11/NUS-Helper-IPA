@@ -55,14 +55,15 @@ const NEXTBUS_SITE="https://bus.hewliyang.com";
 async function loadShuttleArrivals(code){
   const data=await getJSON(`${NEXTBUS_SITE}/api/stop/${encodeURIComponent(code)}`,{native:true});
   const mins=v=>{ const n=parseInt(v,10); return Number.isFinite(n)?n:null; };
+  // Each row gives two times. A service can be listed twice (e.g. two loops
+  // calling here), so pool every time per service and keep the soonest three.
   const byService=new Map();
   for(const t of data?.etas?.timings||[]){
-    // The API can list the same service twice (e.g. two loops); keep the soonest.
-    const row={service:t.name,next:mins(t.arrivalTime),then:mins(t.nextArrivalTime)};
-    const prev=byService.get(row.service);
-    if(!prev || (row.next??999)<(prev.next??999)) byService.set(row.service,row);
+    const list=byService.get(t.name)||[];
+    list.push(mins(t.arrivalTime),mins(t.nextArrivalTime));
+    byService.set(t.name,list);
   }
-  return [...byService.values()].sort((a,b)=>(a.next??999)-(b.next??999));
+  return [...byService].map(([service,list])=>etaRow(service,list,"nus")).sort(byNextArrival);
 }
 
 // Singapore public bus arrivals from arrivelah (BusRouter SG).
@@ -75,23 +76,34 @@ async function loadPublicArrivals(code){
     const t=new Date(x.time||x.estimatedArrival||"").getTime();
     return Number.isFinite(t) ? Math.max(0,Math.round((t-Date.now())/60000)) : null;
   };
-  return (data?.services||[]).map(s=>({service:s.no,next:mins(s.next),then:mins(s.subsequent||s.next2)}))
-    .sort((a,b)=>(a.next??999)-(b.next??999));
+  return (data?.services||[]).map(s=>etaRow(s.no,[mins(s.next),mins(s.next2||s.subsequent),mins(s.next3)],"public")).sort(byNextArrival);
 }
 
-// Arrival board HTML. Shuttle boards fall back to an embedded NextBus page in
-// browsers, where the shuttle API is blocked by CORS.
+// {service, kind, times: up to 3 minutes-away values, next, then}
+function etaRow(service,list,kind){
+  const times=[...new Set(list.filter(m=>m!=null))].sort((a,b)=>a-b).slice(0,3);
+  return {service,kind,times,next:times[0]??null,then:times[1]??null};
+}
+function byNextArrival(a,b){ return (a.next??999)-(b.next??999); }
+
+function etaRowsHTML(rows){
+  return `<div class="eta-list">${rows.map(r=>{
+    const later=r.times.slice(1).map(m=>m<=0?"now":m);
+    return `<div class="eta-row">
+      <span class="route-badge ${r.kind==="nus"?`nus r-${esc(String(r.service).replace(/[^A-Za-z0-9]/g,""))}`:"public"}">${esc(r.service)}</span>
+      <span class="eta-next">${r.next==null?"–":r.next<=0?"Arriving":`<b>${r.next}</b> min`}</span>
+      <span class="eta-then">${later.length?`then ${later.join(", ")}${typeof later.at(-1)==="number"?" min":""}`:""}</span>
+    </div>`;
+  }).join("")}</div>`;
+}
+
+// Arrival board HTML for one stop. Shuttle boards fall back to an embedded
+// NextBus page in browsers, where the shuttle API is blocked by CORS.
 async function arrivalsHTML(stop,{embed=true}={}){
   const isNus=stop.type==="nus";
   try{
     const rows=isNus ? await loadShuttleArrivals(stop.code) : await loadPublicArrivals(stop.code);
-    if(!rows.length) return `<div class="empty-inline">No buses right now.</div>`;
-    return `<div class="eta-list">${rows.map(r=>`
-      <div class="eta-row">
-        <span class="route-badge ${isNus?`nus r-${esc(String(r.service).replace(/[^A-Za-z0-9]/g,""))}`:"public"}">${esc(r.service)}</span>
-        <span class="eta-next">${r.next==null?"–":r.next<=0?"Arriving":`<b>${r.next}</b> min`}</span>
-        <span class="eta-then">${r.then==null?"":r.then<=0?"then arriving":`then ${r.then} min`}</span>
-      </div>`).join("")}</div>`;
+    return rows.length ? etaRowsHTML(rows) : `<div class="empty-inline">No buses right now.</div>`;
   }catch(err){
     if(isNus && !isNativeApp() && !embed){
       return `<button class="btn secondary full" data-go="map" data-params='${esc(JSON.stringify({stop:stop.code}))}'>See live shuttle times</button>`;
@@ -102,6 +114,30 @@ async function arrivalsHTML(stop,{embed=true}={}){
     console.warn("Arrivals failed",err);
     return `<div class="empty-inline">Live times unavailable right now. Tap refresh to try again.</div>`;
   }
+}
+
+// Stops near a position for the Today card: NUS shuttle stops and public bus
+// stops together, nearest first. A shuttle stop that shares a pole with a
+// public stop is one entry carrying both.
+async function nearbyBusStops(pos,limit=3){
+  const nus=nearestNusStops(pos,3).filter(s=>s.distance<800);
+  const pub=(await loadPublicStops())
+    .map(s=>({...s,distance:distanceM(pos,s)}))
+    .filter(s=>s.distance<600 && !NUS_STOPS.some(n=>distanceM(n,s)<45))
+    .sort((a,b)=>a.distance-b.distance).slice(0,3);
+  return [...nus,...pub].sort((a,b)=>a.distance-b.distance).slice(0,limit);
+}
+
+// Every service at a stop, shuttles and public buses mixed, soonest first.
+async function combinedArrivals(stop){
+  const nusStop=stop.type==="nus"?stop:NUS_STOPS.find(n=>distanceM(n,stop)<45);
+  const pubStop=stop.type==="public"?stop:await publicStopNear(stop);
+  const rows=[]; let shuttleBlocked=false;
+  await Promise.all([
+    nusStop&&loadShuttleArrivals(nusStop.code).then(r=>rows.push(...r)).catch(()=>{ shuttleBlocked=true; }),
+    pubStop&&loadPublicArrivals(pubStop.code).then(r=>rows.push(...r)).catch(()=>{})
+  ]);
+  return {rows:rows.filter(r=>r.next!=null).sort(byNextArrival),shuttleBlocked:shuttleBlocked&&!isNativeApp(),nusStop,pubStop};
 }
 
 /* ---------- Public bus stop catalogue ---------- */
@@ -311,7 +347,7 @@ async function planShuttleTrips(from,to){
     if(!eta || eta.next==null) continue; // not running right now
     const walk1=a.distance/WALK_SPEED, walk2=b.distance/WALK_SPEED;
     // Catch the first bus you can reach on foot.
-    const catchable=[eta.next,eta.then].filter(m=>m!=null && m*60>=walk1-30);
+    const catchable=eta.times.filter(m=>m*60>=walk1-30);
     const waitMin=catchable.length?catchable[0]:null;
     if(waitMin==null) continue;
     const board=now+Math.max(walk1,waitMin*60)*1000;
@@ -321,7 +357,7 @@ async function planShuttleTrips(from,to){
     const stopsPath=ride.stops.map(c=>{ const s=NUS_STOPS.find(x=>x.code===c); return [s.lat,s.lng]; });
     trips.push({
       shuttle:true, duration:(end-now)/1000, start:new Date(now), end:new Date(end), transfers:0, walk:a.distance+b.distance,
-      live:{service:ride.service,stop:a.code,next:eta.next,then:eta.then},
+      live:{service:ride.service,stop:a.code,next:waitMin,times:eta.times},
       legs:[
         {mode:"WALK",line:"",from:{name:"your location",lat:from.lat,lng:from.lng},to:{name:a.name,code:a.code,lat:a.lat,lng:a.lng},
           start:new Date(now),end:new Date(now+walk1*1000),distance:a.distance,duration:walk1,path:[[from.lat,from.lng],[a.lat,a.lng]],needsPath:"walk"},

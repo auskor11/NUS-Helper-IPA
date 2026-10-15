@@ -168,15 +168,19 @@ select.input{background-image:linear-gradient(45deg,transparent 50%,var(--muted)
 .agenda-main .venue-chip{margin-top:4px}
 .stop-board+.stop-board{margin-top:14px;padding-top:14px;border-top:1px solid var(--line)}
 .stop-title{display:flex;align-items:center;gap:8px;margin-bottom:8px;width:100%}
-.stop-title small{margin-left:auto;color:var(--muted);font-size:12px}
+.stop-title>small{margin-left:auto;color:var(--muted);font-size:12px}
+.stop-name{display:flex;flex-direction:column;text-align:left;min-width:0}
+.stop-name small{color:var(--muted);font-size:11.5px}
+.stop-dot.public{background:#16a34a;box-shadow:0 0 0 3px color-mix(in srgb,#16a34a 25%,transparent)}
+.more-link{font-size:13px;margin-top:2px}
 .stop-dot{width:10px;height:10px;border-radius:50%;background:#ef4444;box-shadow:0 0 0 3px color-mix(in srgb,#ef4444 25%,transparent);flex-shrink:0}
 
 /* ---------- Arrivals ---------- */
 .eta-list{display:flex;flex-direction:column;gap:2px}
-.eta-row{display:grid;grid-template-columns:52px 1fr auto;align-items:center;gap:10px;padding:7px 0}
+.eta-row{display:grid;grid-template-columns:52px auto 1fr;align-items:center;gap:10px;padding:7px 0}
 .eta-next{font-size:15px}
 .eta-next b{font-size:20px;font-weight:800}
-.eta-then{color:var(--muted);font-size:12.5px}
+.eta-then{color:var(--muted);font-size:12.5px;text-align:right}
 .route-badge{display:inline-grid;place-items:center;min-width:44px;height:28px;padding:0 8px;border-radius:8px;font-weight:800;font-size:13px;color:#fff;background:#64748b}
 .route-badge.public{background:#16a34a}
 .route-badge.r-A1{background:#ef4444}.route-badge.r-A2{background:#f59e0b}

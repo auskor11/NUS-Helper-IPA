@@ -79,8 +79,8 @@ views.today=(()=>{
         </div>
         <div class="today-col">
           <div class="card shuttle-card">
-            <div class="card-head"><h3>Nearby shuttles</h3><button class="link" id="shuttleMap">Map</button></div>
-            <div id="shuttleBody"><div class="empty-inline"><span class="spinner sm"></span>Finding your nearest stop…</div></div>
+            <div class="card-head"><h3>Nearby buses</h3><button class="link" id="shuttleMap">Map</button></div>
+            <div id="shuttleBody"><div class="empty-inline"><span class="spinner sm"></span>Finding stops near you…</div></div>
           </div>
           <div class="card">
             <div class="card-head"><h3>Due soon</h3><button class="link" id="todayAddTask">+ Add</button></div>
@@ -96,25 +96,35 @@ views.today=(()=>{
     renderShuttles();
   }
 
+  // Nearest stops, NUS shuttle and public bus together, each listing every
+  // service there (shuttles and buses mixed) by next arrival.
   async function renderShuttles(){
     const body=$("#shuttleBody",el);
     if(!body) return;
     let stops;
     try{
-      stops=nearestNusStops(await getPosition(),2);
+      stops=await nearbyBusStops(await getPosition(),3);
     }catch(err){
-      // No location: show the stop the user last looked at, or Central Library.
+      stops=[];
+    }
+    if(!stops.length){
+      // No location (or nothing nearby): show the stop last looked at, or Central Library.
       const saved=localStorage.getItem("nus_fav_stop")||"CLB";
       stops=[NUS_STOPS.find(s=>s.code===saved)||NUS_STOPS[0]];
     }
     shuttleStop=stops[0];
-    const boards=await Promise.all(stops.map(async s=>`
-      <div class="stop-board">
+    const boards=await Promise.all(stops.map(async s=>{
+      const {rows,shuttleBlocked,nusStop,pubStop}=await combinedArrivals(s);
+      const sub=[nusStop?"NUS shuttle":"",pubStop?`Bus stop ${pubStop.code}`:""].filter(Boolean).join(" · ");
+      return `<div class="stop-board">
         <button class="stop-title" data-go="map" data-params='${esc(JSON.stringify({stop:s.code}))}'>
-          <span class="stop-dot"></span><b>${esc(s.name)}</b>${s.distance!=null?`<small>${distanceLabel(s.distance)}</small>`:""}
+          <span class="stop-dot ${s.type==="public"?"public":""}"></span><span class="stop-name"><b>${esc(s.name)}</b><small>${sub}</small></span>${s.distance!=null?`<small>${distanceLabel(s.distance)}</small>`:""}
         </button>
-        ${await arrivalsHTML(s,{embed:false})}
-      </div>`));
+        ${rows.length?etaRowsHTML(rows.slice(0,4)):`<div class="empty-inline">No buses right now.</div>`}
+        ${rows.length>4?`<button class="link more-link" data-go="map" data-params='${esc(JSON.stringify({stop:s.code}))}'>${rows.length-4} more service${rows.length-4===1?"":"s"}</button>`:""}
+        ${shuttleBlocked?`<button class="btn secondary full" data-go="map" data-params='${esc(JSON.stringify({stop:s.code}))}'>See live shuttle times</button>`:""}
+      </div>`;
+    }));
     if(activeView==="today" && $("#shuttleBody",el)) $("#shuttleBody",el).innerHTML=boards.join("");
   }
 

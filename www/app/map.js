@@ -385,7 +385,7 @@ views.map=(()=>{
           const rows=first.mode==="SHUTTLE"?await loadShuttleArrivals(first.from.code):await loadPublicArrivals(first.from.code);
           const live=rows.find(x=>String(x.service)===String(first.line));
           const box=$("#liveNext",el); if(!box) return;
-          box.innerHTML=live&&live.next!=null?`<span class="pill live">Live</span> Next ${esc(first.line)} ${live.next<=0?"arriving now":`in ${live.next} min`}${live.then!=null?`, then ${live.then<=0?"arriving":`${live.then} min`}`:""}`
+          box.innerHTML=live&&live.next!=null?`<span class="pill live">Live</span> Next ${esc(first.line)} ${live.next<=0?"arriving now":`in ${live.next} min`}${live.times.length>1?`, then ${live.times.slice(1).join(", ")} min`:""}`
             :`No live data for ${esc(first.line)} right now.`;
         }catch{ const box=$("#liveNext",el); if(box) box.textContent="Live arrival unavailable."; }
       };
