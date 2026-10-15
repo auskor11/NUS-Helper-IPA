@@ -215,6 +215,7 @@ async function loadTransitRoutes(from,to){
       from:place(l.from), to:place(l.to),
       start:new Date(l.startTime), end:new Date(l.endTime),
       stops:(l.intermediateStops||[]).length+1, distance:l.distance||0, duration:l.duration,
+      stopList:l.mode==="WALK"?[]:[l.from,...(l.intermediateStops||[]),l.to].map(p=>({name:tidy(p.name),lat:p.lat,lng:p.lon,time:Date.parse(p.arrival||p.departure||"")||null})),
       path:l.legGeometry?.points?decodePolyline(l.legGeometry.points,l.legGeometry.precision||6):[]
     }));
     return {duration:it.duration,start:new Date(it.startTime),end:new Date(it.endTime),transfers:it.transfers,
@@ -327,7 +328,8 @@ async function planShuttleTrips(from,to){
         {mode:"SHUTTLE",line:ride.service,headsign:(r=>r[0]===r.at(-1)?"":stopName(r.at(-1)))(SHUTTLE_ROUTES[ride.service]),
           from:{name:a.name,code:a.code,lat:a.lat,lng:a.lng},to:{name:b.name,code:b.code,lat:b.lat,lng:b.lng},
           start:new Date(board),end:new Date(alight),stops:ride.stops.length-1,distance:0,duration:rideSecs,path:stopsPath,needsPath:"shuttle",
-          via:ride.stops.slice(1,-1).map(stopName)},
+          via:ride.stops.slice(1,-1).map(stopName),
+          stopList:ride.stops.map(c=>{ const s=NUS_STOPS.find(x=>x.code===c); return {name:s.name,lat:s.lat,lng:s.lng,time:null}; })},
         {mode:"WALK",line:"",from:{name:b.name,lat:b.lat,lng:b.lng},to:{name:"your destination",lat:to.lat,lng:to.lng},
           start:new Date(alight),end:new Date(end),distance:b.distance,duration:walk2,path:[[b.lat,b.lng],[to.lat,to.lng]],needsPath:"walk"}
       ]

@@ -35,8 +35,14 @@
 	<string>$(CURRENT_PROJECT_VERSION)</string>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
+	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
+	<string>NUS Companion uses your location during a trip to count bus stops and update the Dynamic Island while the app is in the background.</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
-	<string>NUS Companion uses your location to show you on the campus map and find nearby bus stops.</string>
+	<string>NUS Companion uses your location to show you on the map, find nearby bus stops, and follow your trip in the Dynamic Island.</string>
+	<key>NSSupportsLiveActivities</key>
+	<true/>
+	<key>NSSupportsLiveActivitiesFrequentUpdates</key>
+	<true/>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>
@@ -56,6 +62,10 @@
 			</array>
 		</dict>
 	</dict>
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>location</string>
+	</array>
 	<key>UILaunchStoryboardName</key>
 	<string>LaunchScreen</string>
 	<key>UIMainStoryboardFile</key>

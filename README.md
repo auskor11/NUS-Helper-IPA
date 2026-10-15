@@ -40,10 +40,27 @@ Free Apple ID signing expires after **7 days**. Rebuild and reinstall to renew i
 
 Not bundled: `sw.js` (service workers don't run in iOS apps).
 
+## Dynamic Island trips
+
+**Start trip** in a route's details starts a Live Activity. It shows in the Dynamic Island and on the lock screen. The phone tracks the trip with background location until it ends.
+
+- Transit: walking to the stop, then a live countdown to the bus, then stops left with a progress bar. One stop before getting off, the island expands and the phone vibrates.
+- Walk, cycle and drive: distance and time left.
+- The trip ends on arrival, from **End trip**, or after 2 hours.
+
+Code: `ios/App/App/Trip/` (tracker + Capacitor plugin) and `ios/App/TripActivity/` (widget extension UI). `TripAttributes.swift` is compiled into both targets. The plugin is registered through `packageClassList`; `scripts/patch-ios.mjs` adds it after every `cap sync`. Requires iOS 16.2+.
+
+To test a ride in the simulator, move the simulated location along stops:
+
+```bash
+xcrun simctl location booted start --speed=4 1.2966,103.7735 1.297204,103.772688 1.298904,103.774118 1.301081,103.77369 1.303876,103.774621
+```
+
 ## Files
 
 - `scripts/sync-web.mjs` copies the web app into `www/` and applies the patches.
 - `scripts/build-ipa.sh` archives the app and exports the IPA.
+- `scripts/patch-ios.mjs` registers the app's own native plugins after `cap sync`.
 - `native/` holds the JS loaded only in the iOS app.
 - `resources/` holds the SVG sources for the app icon and splash screen.
 - `ios/App/App/GoogleService-Info.plist` is the Firebase iOS app config (`firebase apps:sdkconfig IOS 1:685608964768:ios:1f8d597eef1abe93b72fc5`).

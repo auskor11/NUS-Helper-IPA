@@ -6,7 +6,7 @@
   "type": "module",
   "scripts": {
     "sync-web": "node scripts/sync-web.mjs",
-    "sync": "npm run sync-web && npx cap sync ios",
+    "sync": "npm run sync-web && npx cap sync ios && node scripts/patch-ios.mjs",
     "open": "npx cap open ios",
     "build-ipa": "npm run sync && bash scripts/build-ipa.sh"
   },

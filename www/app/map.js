@@ -8,6 +8,12 @@ views.map=(()=>{
   let nusMarkers=new Map(), nusLayer=null, publicLayer=null, pinMarker=null, meMarker=null, watchId=null;
   let selected=null, refreshTimer=null, searchTimer=null, pendingParams=null, routeLayer=null;
 
+  // Dynamic Island / lock screen trip tracking (iOS app only).
+  // Native plugin from ios/App/App/Trip (NUS Helper IPA); absent on the web.
+  const TripActivity=isNativeApp()?window.Capacitor?.Plugins?.TripActivity||null:null;
+  let tripActive=false;
+  TripActivity?.addListener("tripEnded",()=>{ tripActive=false; $$("#tripBtn",el).forEach(b=>{ b.textContent="Start trip"; b.classList.replace("danger-soft","primary"); }); });
+
   /* ---------- Markers ---------- */
 
   const nusIcon=(on=false)=>L.divIcon({className:"",html:`<div class="mk-nus ${on?"on":""}">${icon("M8 6v6M16 6v6M2 12h20M7 18h.01M17 18h.01M6 3h12a3 3 0 0 1 3 3v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a3 3 0 0 1 3-3z",14)}</div>`,iconSize:[28,28],iconAnchor:[14,14]});
@@ -259,10 +265,25 @@ views.map=(()=>{
       else{ $("#routeBody",el).innerHTML=`<div class="empty-inline">No ${MODE_LABELS[mode].toLowerCase()} route found.</div>${footer()}`; bindFooter(); clearRoute(); }
     }
 
-    function footer(){
-      return `<div class="two route-actions"><button class="btn secondary" id="routeRecenter">Show my location</button><button class="btn danger-soft" id="routeEnd">End</button></div>`;
+    function footer(trip=false){
+      return `${trip&&TripActivity?`<button class="btn ${tripActive?"danger-soft":"primary"} full" id="tripBtn">${tripActive?"End trip":"Start trip"}</button><p class="small-help trip-help">${trip==="transit"?"Follows you in the Dynamic Island and on the lock screen, and buzzes one stop before you get off.":"Shows distance and time left in the Dynamic Island and on the lock screen."}</p>`:""}
+        <div class="two route-actions"><button class="btn secondary" id="routeRecenter">Show my location</button><button class="btn danger-soft" id="routeEnd">Close</button></div>`;
     }
-    function bindFooter(){
+    function bindFooter(makePlan=null){
+      const tripBtn=$("#tripBtn",el);
+      if(tripBtn && makePlan) tripBtn.onclick=async()=>{
+        try{
+          if(tripActive){
+            await TripActivity.end();
+            tripActive=false; tripBtn.textContent="Start trip"; tripBtn.classList.replace("danger-soft","primary");
+            return;
+          }
+          await TripActivity.start({trip:JSON.stringify(makePlan())});
+          tripActive=true; tripBtn.textContent="End trip"; tripBtn.classList.replace("primary","danger-soft");
+          toast("Trip started. Check the Dynamic Island.");
+          setCollapsed(true);
+        }catch(err){ toast(err.message||"Couldn't start the trip."); }
+      };
       $("#routeEnd",el).onclick=back;
       $("#routeRecenter",el).onclick=()=>{ if(lastPosition) map.setView([lastPosition.lat,lastPosition.lng],18,{animate:true}); };
     }
@@ -274,8 +295,8 @@ views.map=(()=>{
         <div class="route-summary"><b>${walkMinutes(route.duration)} min</b><span>${distanceLabel(route.distance)} · arrive ${arrive}</span></div>
         <details class="route-steps"><summary>Step-by-step (${route.steps.length})</summary>
           <ol>${route.steps.map(st=>`<li>${stepIcon(st)}<span>${esc(st.text)}${st.type!=="arrive"?`<small>${distanceLabel(st.distance)}</small>`:""}</span></li>`).join("")}</ol>
-        </details>${footer()}`;
-      bindFooter();
+        </details>${footer("street")}`;
+      bindFooter(()=>streetPlan(mode,route));
       const color={walk:"#6d5df5",cycle:"#0ea5e9",drive:"#f97316"}[mode];
       drawPath([
         L.polyline(route.path,{color:"#ffffff",weight:9,opacity:.9}),
@@ -354,8 +375,8 @@ views.map=(()=>{
           </div></li>`;
         }).join("")}
         <li class="it-end"><span class="it-dot end">${icon("M12 21s-7-6.2-7-11.5a7 7 0 0 1 14 0C19 14.8 12 21 12 21z",14)}</span><div><b>Arrive at ${esc(title)}</b><small>around ${clockTime(it.end)}</small></div></li>
-        </ol>${footer()}`;
-      bindFooter();
+        </ol>${footer("transit")}`;
+      bindFooter(()=>transitPlan(it));
       $("#routeOptions",el).onclick=()=>{ view="list"; renderTransitList(); };
       drawTransit(it);
       const showLive=async()=>{
@@ -371,6 +392,26 @@ views.map=(()=>{
       showLive();
       clearInterval(refreshTimer);
       refreshTimer=setInterval(()=>{ if(view==="detail" && activeView==="map" && !document.hidden) showLive(); },30000);
+    }
+
+    // Trip plans for the native tracker (ios/App/App/Trip/TripTracker.swift).
+    function transitPlan(it){
+      return {destination:title, mode:"transit", end:+it.end, legs:it.legs.filter(l=>l.mode!=="WALK"||l.distance>=20).map(l=>({
+        mode:l.mode, line:l.line||"", color:l.mode==="WALK"?"#8b7cff":lineColor(l),
+        toName:l.to.name==="your destination"?title:l.to.name, toLat:l.to.lat, toLng:l.to.lng,
+        code:(l.mode==="SHUTTLE"||l.mode==="BUS")&&l.from.code?l.from.code:null,
+        liveKind:l.mode==="SHUTTLE"?"shuttle":l.mode==="BUS"?"bus":null,
+        stops:(l.stopList||[]).filter(p=>Number.isFinite(p.lat)&&Number.isFinite(p.lng)).map(p=>({name:p.name,lat:p.lat,lng:p.lng,time:p.time})),
+        path:l.mode==="WALK"?l.path:[], duration:l.duration||0, start:+l.start, end:+l.end
+      }))};
+    }
+    function streetPlan(mode,route){
+      const now=Date.now();
+      return {destination:title, mode, end:now+route.duration*1000, legs:[{
+        mode:mode.toUpperCase(), line:"", color:{walk:"#6d5df5",cycle:"#0ea5e9",drive:"#f97316"}[mode],
+        toName:title, toLat:dest.lat, toLng:dest.lng, code:null, liveKind:null, stops:[],
+        path:route.path, duration:route.duration, start:now, end:now+route.duration*1000
+      }]};
     }
 
     pick(straight>1000||distanceM(from,dest)>600?"transit":"walk");

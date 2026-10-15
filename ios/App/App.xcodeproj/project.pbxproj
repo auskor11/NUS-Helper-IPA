@@ -7,7 +7,10 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		242094462CBCF3121D09A8B2 /* TripActivityPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = D680DE5AB70A987247E21B09 /* TripActivityPlugin.swift */; };
 		2FAD9763203C412B000D30F8 /* config.xml in Resources */ = {isa = PBXBuildFile; fileRef = 2FAD9762203C412B000D30F8 /* config.xml */; };
+		2FF85D66B9111CAB975A08A2 /* TripActivity.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = E21A11DE7DCF31B6ECE482F5 /* TripActivity.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		4CAD60993BD8EF3B48860411 /* SwiftUI.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 83E4DB2A668387056C239A62 /* SwiftUI.framework */; };
 		4D22ABE92AF431CB00220026 /* CapApp-SPM in Frameworks */ = {isa = PBXBuildFile; productRef = 4D22ABE82AF431CB00220026 /* CapApp-SPM */; };
 		50379B232058CBB4000EE86E /* capacitor.config.json in Resources */ = {isa = PBXBuildFile; fileRef = 50379B222058CBB4000EE86E /* capacitor.config.json */; };
 		504EC3081FED79650016851F /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 504EC3071FED79650016851F /* AppDelegate.swift */; };
@@ -15,11 +18,44 @@
 		504EC30F1FED79650016851F /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 504EC30E1FED79650016851F /* Assets.xcassets */; };
 		504EC3121FED79650016851F /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 504EC3101FED79650016851F /* LaunchScreen.storyboard */; };
 		50B271D11FEDC1A000F3C39B /* public in Resources */ = {isa = PBXBuildFile; fileRef = 50B271D01FEDC1A000F3C39B /* public */; };
+		5F982488A2DADFF989BA4138 /* TripLiveActivity.swift in Sources */ = {isa = PBXBuildFile; fileRef = FF04EFEE73F0C1CA07D071A7 /* TripLiveActivity.swift */; };
+		6DC87D051DDD1F4060B45CA7 /* ActivityKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = A249AA464000FB443EFE4B21 /* ActivityKit.framework */; };
+		761DB3A010585C9AF2F6D659 /* silence.caf in Resources */ = {isa = PBXBuildFile; fileRef = 9A5692ECA7EFDDBC7E5C70AB /* silence.caf */; };
+		79D4546D04A5D4E34A766D57 /* TripTracker.swift in Sources */ = {isa = PBXBuildFile; fileRef = AF5901F8ED27FA7278B6B42E /* TripTracker.swift */; };
 		9582B6832FE993A70072D4E8 /* SceneDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9582B6822FE993A50072D4E8 /* SceneDelegate.swift */; };
+		9A0DEAB1B9BB18EDA09F0B1C /* TripAttributes.swift in Sources */ = {isa = PBXBuildFile; fileRef = 11C8C628C4FE3E1916DA5E39 /* TripAttributes.swift */; };
 		A1B2C3D42F00000100000001 /* GoogleService-Info.plist in Resources */ = {isa = PBXBuildFile; fileRef = A1B2C3D42F00000100000002 /* GoogleService-Info.plist */; };
+		C1C6CF24AECE565014F9EE04 /* TripAttributes.swift in Sources */ = {isa = PBXBuildFile; fileRef = 11C8C628C4FE3E1916DA5E39 /* TripAttributes.swift */; };
+		C698BC4CAEF4495EA9A2125A /* Foundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 6028CE9ACB8FFA1946B50F25 /* Foundation.framework */; };
+		F043B7FCBC2F55507F40E6BB /* WidgetKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 5DC33E6C762CF6B1850FAA95 /* WidgetKit.framework */; };
 /* End PBXBuildFile section */
 
+/* Begin PBXContainerItemProxy section */
+		7FAFD5C1A7CF767395119E4F /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 504EC2FC1FED79650016851F /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = F37759C54052D5111C94AC9C;
+			remoteInfo = TripActivity;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		BCD16D712FB050F3B7F3E627 /* Embed Foundation Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 13;
+			files = (
+				2FF85D66B9111CAB975A08A2 /* TripActivity.appex in Embed Foundation Extensions */,
+			);
+			name = "Embed Foundation Extensions";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
+
 /* Begin PBXFileReference section */
+		11C8C628C4FE3E1916DA5E39 /* TripAttributes.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = TripAttributes.swift; sourceTree = "<group>"; };
 		2FAD9762203C412B000D30F8 /* config.xml */ = {isa = PBXFileReference; lastKnownFileType = text.xml; path = config.xml; sourceTree = "<group>"; };
 		50379B222058CBB4000EE86E /* capacitor.config.json */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.json; path = capacitor.config.json; sourceTree = "<group>"; };
 		504EC3041FED79650016851F /* App.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = App.app; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -29,9 +65,19 @@
 		504EC3111FED79650016851F /* Base */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; name = Base; path = Base.lproj/LaunchScreen.storyboard; sourceTree = "<group>"; };
 		504EC3131FED79650016851F /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		50B271D01FEDC1A000F3C39B /* public */ = {isa = PBXFileReference; lastKnownFileType = folder; path = public; sourceTree = "<group>"; };
+		5DC33E6C762CF6B1850FAA95 /* WidgetKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = WidgetKit.framework; path = Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS26.0.sdk/System/Library/Frameworks/WidgetKit.framework; sourceTree = DEVELOPER_DIR; };
+		6028CE9ACB8FFA1946B50F25 /* Foundation.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Foundation.framework; path = Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS26.0.sdk/System/Library/Frameworks/Foundation.framework; sourceTree = DEVELOPER_DIR; };
+		83E4DB2A668387056C239A62 /* SwiftUI.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = SwiftUI.framework; path = Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS26.0.sdk/System/Library/Frameworks/SwiftUI.framework; sourceTree = DEVELOPER_DIR; };
 		9582B6822FE993A50072D4E8 /* SceneDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SceneDelegate.swift; sourceTree = "<group>"; };
 		958DCC722DB07C7200EA8C5F /* debug.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; name = debug.xcconfig; path = ../debug.xcconfig; sourceTree = SOURCE_ROOT; };
+		9A5692ECA7EFDDBC7E5C70AB /* silence.caf */ = {isa = PBXFileReference; includeInIndex = 1; path = silence.caf; sourceTree = "<group>"; };
 		A1B2C3D42F00000100000002 /* GoogleService-Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = "GoogleService-Info.plist"; sourceTree = "<group>"; };
+		A249AA464000FB443EFE4B21 /* ActivityKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = ActivityKit.framework; path = Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS26.0.sdk/System/Library/Frameworks/ActivityKit.framework; sourceTree = DEVELOPER_DIR; };
+		AF5901F8ED27FA7278B6B42E /* TripTracker.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = TripTracker.swift; sourceTree = "<group>"; };
+		D2C6D5283677B0ABA0539648 /* Info.plist */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		D680DE5AB70A987247E21B09 /* TripActivityPlugin.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = TripActivityPlugin.swift; sourceTree = "<group>"; };
+		E21A11DE7DCF31B6ECE482F5 /* TripActivity.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = TripActivity.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		FF04EFEE73F0C1CA07D071A7 /* TripLiveActivity.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = TripLiveActivity.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -43,15 +89,57 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		E54C3AC840962AA59E9B6718 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				C698BC4CAEF4495EA9A2125A /* Foundation.framework in Frameworks */,
+				F043B7FCBC2F55507F40E6BB /* WidgetKit.framework in Frameworks */,
+				4CAD60993BD8EF3B48860411 /* SwiftUI.framework in Frameworks */,
+				6DC87D051DDD1F4060B45CA7 /* ActivityKit.framework in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
+		0E2FAC011E1E55563BD77777 /* Frameworks */ = {
+			isa = PBXGroup;
+			children = (
+				C2282E607F2A7D695F070CFA /* iOS */,
+			);
+			name = Frameworks;
+			sourceTree = "<group>";
+		};
+		2743F69B0F234089E64063F9 /* TripActivity */ = {
+			isa = PBXGroup;
+			children = (
+				FF04EFEE73F0C1CA07D071A7 /* TripLiveActivity.swift */,
+				D2C6D5283677B0ABA0539648 /* Info.plist */,
+			);
+			name = TripActivity;
+			path = TripActivity;
+			sourceTree = "<group>";
+		};
+		460E7EE75886D3F29C360C79 /* Trip */ = {
+			isa = PBXGroup;
+			children = (
+				11C8C628C4FE3E1916DA5E39 /* TripAttributes.swift */,
+				AF5901F8ED27FA7278B6B42E /* TripTracker.swift */,
+				D680DE5AB70A987247E21B09 /* TripActivityPlugin.swift */,
+			);
+			name = Trip;
+			path = Trip;
+			sourceTree = "<group>";
+		};
 		504EC2FB1FED79650016851F = {
 			isa = PBXGroup;
 			children = (
 				958DCC722DB07C7200EA8C5F /* debug.xcconfig */,
 				504EC3061FED79650016851F /* App */,
 				504EC3051FED79650016851F /* Products */,
+				0E2FAC011E1E55563BD77777 /* Frameworks */,
+				2743F69B0F234089E64063F9 /* TripActivity */,
 			);
 			sourceTree = "<group>";
 		};
@@ -59,6 +147,7 @@
 			isa = PBXGroup;
 			children = (
 				504EC3041FED79650016851F /* App.app */,
+				E21A11DE7DCF31B6ECE482F5 /* TripActivity.appex */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -76,8 +165,21 @@
 				2FAD9762203C412B000D30F8 /* config.xml */,
 				A1B2C3D42F00000100000002 /* GoogleService-Info.plist */,
 				50B271D01FEDC1A000F3C39B /* public */,
+				460E7EE75886D3F29C360C79 /* Trip */,
+				9A5692ECA7EFDDBC7E5C70AB /* silence.caf */,
 			);
 			path = App;
+			sourceTree = "<group>";
+		};
+		C2282E607F2A7D695F070CFA /* iOS */ = {
+			isa = PBXGroup;
+			children = (
+				6028CE9ACB8FFA1946B50F25 /* Foundation.framework */,
+				5DC33E6C762CF6B1850FAA95 /* WidgetKit.framework */,
+				83E4DB2A668387056C239A62 /* SwiftUI.framework */,
+				A249AA464000FB443EFE4B21 /* ActivityKit.framework */,
+			);
+			name = iOS;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -90,10 +192,12 @@
 				504EC3001FED79650016851F /* Sources */,
 				504EC3011FED79650016851F /* Frameworks */,
 				504EC3021FED79650016851F /* Resources */,
+				BCD16D712FB050F3B7F3E627 /* Embed Foundation Extensions */,
 			);
 			buildRules = (
 			);
 			dependencies = (
+				6FB5091D89A5DA97D94DAEDA /* PBXTargetDependency */,
 			);
 			name = App;
 			packageProductDependencies = (
@@ -102,6 +206,23 @@
 			productName = App;
 			productReference = 504EC3041FED79650016851F /* App.app */;
 			productType = "com.apple.product-type.application";
+		};
+		F37759C54052D5111C94AC9C /* TripActivity */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 9054C91252273576F6C48D46 /* Build configuration list for PBXNativeTarget "TripActivity" */;
+			buildPhases = (
+				ECD1FE298FE8EB88448586D8 /* Sources */,
+				E54C3AC840962AA59E9B6718 /* Frameworks */,
+				C8CA8B63B73138E7853972EA /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = TripActivity;
+			productName = TripActivity;
+			productReference = E21A11DE7DCF31B6ECE482F5 /* TripActivity.appex */;
+			productType = "com.apple.product-type.app-extension";
 		};
 /* End PBXNativeTarget section */
 
@@ -136,6 +257,7 @@
 			projectRoot = "";
 			targets = (
 				504EC3031FED79650016851F /* App */,
+				F37759C54052D5111C94AC9C /* TripActivity */,
 			);
 		};
 /* End PBXProject section */
@@ -152,6 +274,14 @@
 				504EC30D1FED79650016851F /* Main.storyboard in Resources */,
 				2FAD9763203C412B000D30F8 /* config.xml in Resources */,
 				A1B2C3D42F00000100000001 /* GoogleService-Info.plist in Resources */,
+				761DB3A010585C9AF2F6D659 /* silence.caf in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		C8CA8B63B73138E7853972EA /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -164,10 +294,31 @@
 			files = (
 				504EC3081FED79650016851F /* AppDelegate.swift in Sources */,
 				9582B6832FE993A70072D4E8 /* SceneDelegate.swift in Sources */,
+				9A0DEAB1B9BB18EDA09F0B1C /* TripAttributes.swift in Sources */,
+				79D4546D04A5D4E34A766D57 /* TripTracker.swift in Sources */,
+				242094462CBCF3121D09A8B2 /* TripActivityPlugin.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		ECD1FE298FE8EB88448586D8 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				5F982488A2DADFF989BA4138 /* TripLiveActivity.swift in Sources */,
+				C1C6CF24AECE565014F9EE04 /* TripAttributes.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		6FB5091D89A5DA97D94DAEDA /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			name = TripActivity;
+			target = F37759C54052D5111C94AC9C /* TripActivity */;
+			targetProxy = 7FAFD5C1A7CF767395119E4F /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
 
 /* Begin PBXVariantGroup section */
 		504EC30B1FED79650016851F /* Main.storyboard */ = {
@@ -189,6 +340,32 @@
 /* End PBXVariantGroup section */
 
 /* Begin XCBuildConfiguration section */
+		2259616805B2AD96729B5875 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CLANG_ENABLE_OBJC_WEAK = NO;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = FF395Z92C2;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = TripActivity/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 16.2;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "auskor.NUS-Helper.TripActivity";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SKIP_INSTALL = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 1;
+				VALIDATE_PRODUCT = YES;
+			};
+			name = Release;
+		};
 		504EC3141FED79650016851F /* Debug */ = {
 			isa = XCBuildConfiguration;
 			baseConfigurationReference = 958DCC722DB07C7200EA8C5F /* debug.xcconfig */;
@@ -238,7 +415,7 @@
 				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
-				IPHONEOS_DEPLOYMENT_TARGET = 15.0;
+				IPHONEOS_DEPLOYMENT_TARGET = 16.2;
 				MTL_ENABLE_DEBUG_INFO = YES;
 				ONLY_ACTIVE_ARCH = YES;
 				SDKROOT = iphoneos;
@@ -289,7 +466,7 @@
 				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
-				IPHONEOS_DEPLOYMENT_TARGET = 15.0;
+				IPHONEOS_DEPLOYMENT_TARGET = 16.2;
 				MTL_ENABLE_DEBUG_INFO = NO;
 				SDKROOT = iphoneos;
 				SWIFT_COMPILATION_MODE = wholemodule;
@@ -304,10 +481,10 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_STYLE = Automatic;
-				DEVELOPMENT_TEAM = FF395Z92C2;
 				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = FF395Z92C2;
 				INFOPLIST_FILE = App/Info.plist;
-				IPHONEOS_DEPLOYMENT_TARGET = 15.0;
+				IPHONEOS_DEPLOYMENT_TARGET = 16.2;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -327,10 +504,10 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_STYLE = Automatic;
-				DEVELOPMENT_TEAM = FF395Z92C2;
 				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = FF395Z92C2;
 				INFOPLIST_FILE = App/Info.plist;
-				IPHONEOS_DEPLOYMENT_TARGET = 15.0;
+				IPHONEOS_DEPLOYMENT_TARGET = 16.2;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -343,6 +520,31 @@
 				TARGETED_DEVICE_FAMILY = 1;
 			};
 			name = Release;
+		};
+		DA12A576C7FB1BE45796DCE8 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CLANG_ENABLE_OBJC_WEAK = NO;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = FF395Z92C2;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = TripActivity/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 16.2;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "auskor.NUS-Helper.TripActivity";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SKIP_INSTALL = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 1;
+			};
+			name = Debug;
 		};
 /* End XCBuildConfiguration section */
 
@@ -361,6 +563,15 @@
 			buildConfigurations = (
 				504EC3171FED79650016851F /* Debug */,
 				504EC3181FED79650016851F /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		9054C91252273576F6C48D46 /* Build configuration list for PBXNativeTarget "TripActivity" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				2259616805B2AD96729B5875 /* Release */,
+				DA12A576C7FB1BE45796DCE8 /* Debug */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
