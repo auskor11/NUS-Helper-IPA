@@ -56,7 +56,9 @@ function syllabusPrompt(){
   const day=n=>start?addDays(start,n).toLocaleDateString("en-SG",{weekday:"short",day:"numeric",month:"short",year:"numeric"}):"";
   const calendar=start?`- AY${state.semester.academicYear} Semester ${state.semester.semester}: Week 1 starts ${day(0)}. Weeks 1–6, then Recess week (${day(42)} – ${day(48)}), Week 7 starts ${day(49)}, Week 13 ends ${day(97)}, Reading week ${day(98)} – ${day(104)}, exams ${day(105)} – ${day(118)}.\n`:"";
   const codes=state.modules.map(m=>m.code).join(", ");
-  return `I'll share my NUS module schedules (lesson plans, course outlines or syllabus pages). Turn them into one JSON file for my NUS Companion app and give me the file to download as syllabus.json.
+  return `I've attached the semester outline PDFs for my NUS modules (one per module). Read every PDF, including any tables of weekly topics and assessment breakdowns, and turn them into one JSON file for my NUS Companion app. Give me the file to download as syllabus.json.
+
+If an outline has no weekly schedule, still include its assessments. If a PDF is unreadable or isn't a module outline, tell me which one instead of guessing.
 
 Use exactly this shape:
 {
@@ -180,10 +182,11 @@ function openSyllabusHelp(){
   openModal(`<h2>Make your syllabus file</h2>
     <ol class="steps">
       <li>Copy the prompt below</li>
-      <li>Open Claude, paste it, and attach your modules' lesson plans or course outlines (PDFs, screenshots or Canvas pages)</li>
-      <li>Download the <b>syllabus.json</b> Claude makes</li>
-      <li>Come back and tap <b>Import syllabus</b></li>
+      <li>In a new Claude chat, paste it and attach your modules' <b>semester outline PDFs</b> (the + or paperclip button). Attach them all at once, or one module per chat</li>
+      <li>Download the <b>syllabus.json</b> Claude makes. On iPhone, tap the file, then Share → Save to Files</li>
+      <li>Come back and tap <b>Import or update</b> → Choose file</li>
     </ol>
+    <p class="small-help">Doing one module at a time is fine: importing a file only replaces the modules in it. If a module's outline changes, make a new file for just that module and import it.</p>
     <button class="btn primary full" id="copyPrompt">${icon("M8 8h12v12H8zM4 16V4h12",18)}Copy prompt</button>
     <pre class="prompt-box">${esc(prompt)}</pre>`,{wide:true});
   $("#copyPrompt").onclick=async()=>{

@@ -94,25 +94,26 @@ function etaRow(service,list,kind){
   return {service,kind,times,buses:arrivals.map(({type="",load=""})=>({type,load})),next:times[0]??null,then:times[1]??null};
 }
 
-const BUS_TYPES={DD:"Double deck",SD:"Single deck",BD:"Bendy"};
+const BUS_TYPES={DD:"Double",SD:"Single",BD:"Bendy"};
 const BUS_LOADS={SEA:"Seats available",SDA:"Standing",LSD:"Packed"};
-
-// "Double deck · Seats available" for a public bus, with a crowd dot.
-function busInfoHTML(bus){
-  if(!bus||!(BUS_TYPES[bus.type]||BUS_LOADS[bus.load])) return "";
-  return `<span class="bus-info">${BUS_LOADS[bus.load]?`<i class="load load-${esc(bus.load)}" title="${esc(BUS_LOADS[bus.load])}"></i>`:""}${esc([BUS_TYPES[bus.type],BUS_LOADS[bus.load]].filter(Boolean).join(" · "))}</span>`;
-}
 function byNextArrival(a,b){ return (a.next??999)-(b.next??999); }
 
+// One row per service with the next three buses side by side, like SingaBus:
+// minutes away (coloured by how full the bus is) over its deck type.
 function etaRowsHTML(rows){
-  return `<div class="eta-list">${rows.map(r=>{
-    const later=r.times.slice(1).map(m=>m<=0?"now":m);
-    return `<div class="eta-row">
+  const hasLoad=rows.some(r=>r.buses?.some(b=>BUS_LOADS[b.load]));
+  return `<div class="eta-list">${rows.map(r=>`
+    <div class="eta-row">
       <span class="route-badge ${r.kind==="nus"?`nus r-${esc(String(r.service).replace(/[^A-Za-z0-9]/g,""))}`:"public"}">${esc(r.service)}</span>
-      <span class="eta-next">${r.next==null?"–":r.next<=0?"Arriving":`<b>${r.next}</b> min`}${busInfoHTML(r.buses?.[0])}</span>
-      <span class="eta-then">${later.length?`then ${later.join(", ")}${typeof later.at(-1)==="number"?" min":""}`:""}</span>
-    </div>`;
-  }).join("")}</div>`;
+      <span class="eta-cells">${[0,1,2].map(i=>{
+        const m=r.times[i], b=r.buses?.[i]||{};
+        if(m==null) return `<span class="eta-cell"></span>`;
+        return `<span class="eta-cell ${BUS_LOADS[b.load]?`load-${esc(b.load)}`:""}" ${BUS_LOADS[b.load]?`title="${esc(BUS_LOADS[b.load])}"`:""}>
+          <b>${m<=0?"Arr":m}</b><small>${esc(BUS_TYPES[b.type]||(i===0&&r.kind==="nus"?"min":""))}</small></span>`;
+      }).join("")}</span>
+    </div>`).join("")}
+    <p class="eta-legend">Minutes away${hasLoad?` · <i class="load-SEA">●</i> seats <i class="load-SDA">●</i> standing <i class="load-LSD">●</i> packed`:""}</p>
+  </div>`;
 }
 
 // Arrival board HTML for one stop. Shuttle boards fall back to an embedded

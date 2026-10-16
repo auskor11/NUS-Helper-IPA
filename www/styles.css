@@ -183,13 +183,19 @@ select.input{background-image:linear-gradient(45deg,transparent 50%,var(--muted)
 
 /* ---------- Arrivals ---------- */
 .eta-list{display:flex;flex-direction:column;gap:2px}
-.eta-row{display:grid;grid-template-columns:52px auto 1fr;align-items:center;gap:10px;padding:7px 0}
-.eta-next{font-size:15px}
-.eta-next b{font-size:20px;font-weight:800}
-.eta-next .bus-info{display:flex;align-items:center;gap:5px;font-size:11.5px;color:var(--muted);margin-top:1px;white-space:nowrap}
-.load{width:7px;height:7px;border-radius:50%;flex-shrink:0;background:var(--muted)}
-.load-SEA{background:#22c55e}.load-SDA{background:#f59e0b}.load-LSD{background:#ef4444}
-.eta-then{color:var(--muted);font-size:12.5px;text-align:right}
+.eta-row{display:grid;grid-template-columns:52px 1fr;align-items:center;gap:10px;padding:6px 0}
+.eta-cells{display:grid;grid-template-columns:repeat(3,1fr);gap:4px}
+.eta-cell{display:flex;flex-direction:column;align-items:flex-end;line-height:1.1}
+.eta-cell b{font-size:20px;font-weight:800;font-variant-numeric:tabular-nums}
+.eta-cell small{font-size:11px;font-weight:600;color:var(--muted);min-height:12px;margin-top:2px}
+.eta-cell.load-SEA b,.eta-legend .load-SEA{color:#16a34a}
+.eta-cell.load-SDA b,.eta-legend .load-SDA{color:#d97706}
+.eta-cell.load-LSD b,.eta-legend .load-LSD{color:#dc2626}
+body:not(.light) .eta-cell.load-SEA b,body:not(.light) .eta-legend .load-SEA{color:#4ade80}
+body:not(.light) .eta-cell.load-SDA b,body:not(.light) .eta-legend .load-SDA{color:#fbbf24}
+body:not(.light) .eta-cell.load-LSD b,body:not(.light) .eta-legend .load-LSD{color:#f87171}
+.eta-legend{margin:6px 0 0;font-size:11px;color:var(--muted);text-align:right}
+.eta-legend i{font-style:normal}
 .route-badge{display:inline-grid;place-items:center;min-width:44px;height:28px;padding:0 8px;border-radius:8px;font-weight:800;font-size:13px;color:#fff;background:#64748b}
 .route-badge.public{background:#16a34a}
 .route-badge.r-A1{background:#ef4444}.route-badge.r-A2{background:#f59e0b}
