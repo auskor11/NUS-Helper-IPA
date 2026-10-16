@@ -55,7 +55,7 @@
       notifications:upcoming.map(x=>({
         id:numericId(x.id),
         title:x.kind==="Task · overdue"?"⚠ Overdue task":`🔔 ${x.kind}`,
-        body:x.deadline?`${x.title} · Deadline: ${x.deadline}`:`${x.title} · ${x.body}`,
+        body:x.kind.startsWith("Assessment")?`${x.title} · ${x.deadline}`:x.deadline?`${x.title} · Deadline: ${x.deadline}`:`${x.title} · ${x.body}`,
         schedule:{at:new Date(x.when),allowWhileIdle:true},
         extra:{href:x.href}
       }))

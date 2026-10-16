@@ -7,15 +7,19 @@
 <title>Login · NUS Companion</title>
 <link rel="manifest" href="/manifest.webmanifest">
 <link rel="icon" href="/assets/icon.svg">
-<link rel="stylesheet" href="/styles.css?v=200">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/styles.css?v=201">
 </head>
 <body class="auth-page" data-page="login">
+<script>try{var t=localStorage.getItem("nus_theme");if(t?t==="light":matchMedia("(prefers-color-scheme: light)").matches)document.body.classList.add("light")}catch(e){}</script>
 <main class="auth-wrap">
   <section class="auth-card">
     <div class="auth-logo">N</div>
-    <div class="eyebrow">NUS COMPANION V24</div>
-    <h1>Welcome back.</h1>
-    <p class="subtle auth-intro">Sign in to keep your modules, timetable, activities and tasks synced across your devices.</p>
+    <div class="eyebrow">NUS Companion</div>
+    <h1>Welcome back</h1>
+    <p class="subtle auth-intro">Your timetable, courses, assessments and NUS buses in one place, synced across your phone and computer.</p>
 
     <div id="authError" class="error-box hidden"></div>
 

@@ -383,7 +383,9 @@ function nextEvent(){
 
 /* ---------- Reminders ---------- */
 // Same rules as push-server/send-reminders.mjs: tasks 7 days and 1 day before
-// the deadline (plus when overdue), activities 1 day before.
+// the deadline (plus when overdue), activities 1 day before, assessments 3
+// days and 1 day before (at 9am) plus on the day (2 hours before, or 9am
+// if untimed), until the assessment has passed.
 
 const NOTIFICATION_KEY="nus_notification_log_v59";
 
@@ -423,6 +425,25 @@ function buildNotificationItems(){
     add(`${a.id}-1d-${a.recurring?isoDate(d):a.date}`,a.name,`${a.club||"Activity"} · tomorrow`,d.getTime()-86400000,"Activity · 1 day","/#/more/activities",label);
   }
 
+  // Dated assessments from the syllabus (app/syllabus.js).
+  for(const m of state.syllabus?.modules||[]){
+    for(const a of m.assessments||[]){
+      if(!a.date) continue;
+      const at=new Date(`${a.date}T${a.time||"23:59"}:00`).getTime();
+      const nine=new Date(`${a.date}T09:00:00`).getTime();
+      if(!Number.isFinite(at) || at<now) continue;
+      const key=`assess-${m.code}-${String(a.title).toLowerCase().replace(/[^a-z0-9]+/g,"-")}-${a.date}`;
+      const w=parseFloat(String(a.weight??"").replace(/[^0-9.]/g,""));
+      const what=`${m.code} ${a.title}${Number.isFinite(w)?` (${+w.toFixed(2)}%)`:""}`;
+      const when=`${fmtDate(a.date)}${a.time?`, ${inputTimeToLabel(a.time)}`:""}`;
+      const href=`/#/courses/module?code=${encodeURIComponent(m.code)}&tab=assess`;
+      add(`${key}-3d`,what,`${a.venue?`${a.venue} · `:""}in 3 days`,nine-3*86400000,"Assessment · 3 days",href,when);
+      add(`${key}-1d`,what,`${a.venue?`${a.venue} · `:""}tomorrow`,nine-86400000,"Assessment · 1 day",href,when);
+      const dayOf=a.time?at-2*3600000:nine;
+      add(`${key}-day`,what,a.time?`${a.venue?`${a.venue} · `:""}in 2 hours`:"today",dayOf,"Assessment · today",href,when);
+    }
+  }
+
   return items.sort((a,b)=>a.when-b.when);
 }
 
@@ -431,7 +452,7 @@ function currentReminders(){
   const now=Date.now(), grouped=new Map();
   for(const item of buildNotificationItems()){
     if(item.when>now+86400000) continue;
-    const key=item.id.replace(/-(7d|1d|overdue)(-.+)?$/,"");
+    const key=item.id.replace(/-(7d|3d|1d|day|overdue)(-.+)?$/,"");
     const prev=grouped.get(key);
     if(!prev || item.when>prev.when) grouped.set(key,item);
   }
