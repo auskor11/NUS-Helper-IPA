@@ -200,54 +200,81 @@ enum ShuttleRouting {
 
 // MARK: - Stop picker (widget configuration)
 
-struct StopEntity: AppEntity {
-    static var typeDisplayRepresentation: TypeDisplayRepresentation = "Bus stop"
-    static var defaultQuery = StopQuery()
-
+/// A bus stop the widgets show: an NUS shuttle stop (with the public stop on
+/// the same pole, if any) or a public bus stop.
+struct StopEntity {
     /// NUS stop code (e.g. "CLB") or 5-digit public stop code.
     let id: String
     let name: String
     let isNUS: Bool
     let publicCode: String?
 
-    var displayRepresentation: DisplayRepresentation {
-        DisplayRepresentation(title: "\(name)", subtitle: isNUS ? "NUS shuttle" : "Bus stop \(id)")
-    }
-
     static let fallback = StopEntity(id: "CLB", name: "Central Library", isNUS: true, publicCode: "16181")
 }
 
-struct StopQuery: EntityStringQuery {
-    func entities(for identifiers: [StopEntity.ID]) async throws -> [StopEntity] {
-        let nus = nusStops()
-        var out: [StopEntity] = []
-        for id in identifiers {
-            if let s = nus.first(where: { $0.id == id }) { out.append(s); continue }
-            if let p = await PublicStops.all().first(where: { $0.id == id }) { out.append(p) }
-            else { out.append(StopEntity(id: id, name: "Bus stop \(id)", isNUS: false, publicCode: id)) }
-        }
-        return out
+/// The widgets store the chosen stop as its label, "Central Library · NUS
+/// shuttle" or "Aft Kent Ridge Dr · 16191", rather than as an AppEntity:
+/// iOS hands a string straight to the widget, while an entity has to be
+/// looked up again and that lookup can fail, leaving the widget on its default.
+enum StopChoice {
+    static let nusTag = "NUS shuttle"
+
+    static func label(_ stop: StopEntity) -> String { "\(stop.name) · \(stop.isNUS ? nusTag : stop.id)" }
+
+    /// A 5-digit public bus stop number, as on the stop's sign.
+    static func resolve(number: String?) async -> StopEntity? {
+        let code = (number ?? "").filter(\.isNumber)
+        guard code.count == 5 else { return nil }
+        return await PublicStops.all().first { $0.id == code } ?? StopEntity(id: code, name: "Bus stop \(code)", isNUS: false, publicCode: code)
     }
 
-    func suggestedEntities() async throws -> [StopEntity] { nusStops() }
-
-    func entities(matching string: String) async throws -> [StopEntity] {
-        let q = string.lowercased()
-        let nus = nusStops().filter { $0.name.lowercased().contains(q) || $0.id.lowercased().contains(q) }
-        let pub = await PublicStops.all().filter { $0.name.lowercased().contains(q) || $0.id.hasPrefix(q) }.prefix(30)
-        return nus + pub
+    static func resolve(_ label: String?) async -> StopEntity? {
+        guard let label, let tag = label.components(separatedBy: " · ").last else { return nil }
+        let name = String(label.dropLast(tag.count + 3))
+        if tag == nusTag { return nusStops().first { $0.name == name } }
+        if let stop = await PublicStops.all().first(where: { $0.id == tag }) { return stop }
+        return StopEntity(id: tag, name: name, isNUS: false, publicCode: tag)
     }
 
-    private func nusStops() -> [StopEntity] {
+    static func nusStops() -> [StopEntity] {
         let stops = WidgetData.load()?.stops ?? []
         let list = stops.map { StopEntity(id: $0.code, name: $0.name, isNUS: true, publicCode: $0.publicCode) }
         return list.isEmpty ? [StopEntity.fallback] : list
     }
 }
 
+/// Stops offered when editing the Bus stop widget: NUS stops and public stops
+/// around campus. iOS shows these as a menu without search, so any other stop
+/// is entered by its number instead (BusStopConfig.stopNumber).
+struct AnyStopOptions: DynamicOptionsProvider {
+    func results() async throws -> ItemCollection<String> {
+        let nus = WidgetData.load()?.stops ?? []
+        let linked = Set(nus.compactMap(\.publicCode))
+        let all = await PublicStops.located()
+        let nearby = all.filter { p in
+            !linked.contains(p.stop.id) && nus.contains { ShuttleRouting.distance($0.lat, $0.lng, p.lat, p.lng) < 600 }
+        }.map(\.stop)
+        let item = { (s: StopEntity) in IntentItem(StopChoice.label(s), title: "\(s.name)", subtitle: s.isNUS ? "NUS shuttle" : "Bus stop \(s.id)") }
+        return ItemCollection(sections: [
+            ItemSection("NUS shuttle stops", items: StopChoice.nusStops().map(item)),
+            ItemSection("Public bus stops near NUS", items: nearby.map(item))
+        ])
+    }
+
+    func defaultResult() async -> String? { StopChoice.label(.fallback) }
+}
+
+/// Stops offered for "I usually leave from" (Up next): NUS shuttle stops only.
+struct NUSStopOptions: DynamicOptionsProvider {
+    func results() async throws -> [String] { StopChoice.nusStops().map(StopChoice.label) }
+    func defaultResult() async -> String? { StopChoice.label(.fallback) }
+}
+
 /// Singapore public bus stops (BusRouter SG), cached in the App Group.
 enum PublicStops {
-    static func all() async -> [StopEntity] {
+    static func all() async -> [StopEntity] { await located().map(\.stop) }
+
+    static func located() async -> [(stop: StopEntity, lat: Double, lng: Double)] {
         let dir = AppGroup.container
         let file = dir?.appendingPathComponent("public-stops.json")
         var data = file.flatMap { try? Data(contentsOf: $0) }
@@ -256,10 +283,11 @@ enum PublicStops {
             if let data, let file { try? data.write(to: file) }
         }
         guard let data, let dict = try? JSONSerialization.jsonObject(with: data) as? [String: [Any]] else { return [] }
-        return dict.compactMap { code, v in
-            guard v.count >= 3, let name = v[2] as? String else { return nil }
-            return StopEntity(id: code, name: name, isNUS: false, publicCode: code)
-        }.sorted { $0.name < $1.name }
+        return dict.compactMap { key, v in
+            guard v.count >= 3, let lng = v[0] as? Double, let lat = v[1] as? Double, let name = v[2] as? String else { return nil }
+            let code = String(repeating: "0", count: max(0, 5 - key.count)) + key
+            return (StopEntity(id: code, name: name, isNUS: false, publicCode: code), lat, lng)
+        }.sorted { $0.stop.name < $1.stop.name }
     }
 }
 

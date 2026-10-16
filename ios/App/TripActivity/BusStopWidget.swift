@@ -10,8 +10,17 @@ struct BusStopConfig: WidgetConfigurationIntent {
     static var title: LocalizedStringResource = "Bus stop"
     static var description = IntentDescription("Live arrivals at your favourite stop.")
 
-    @Parameter(title: "Stop")
-    var stop: StopEntity?
+    @Parameter(title: "Stop", optionsProvider: AnyStopOptions())
+    var stop: String?
+
+    @Parameter(title: "Bus stop no.", description: "Any public bus stop in Singapore, e.g. 16191. Overrides the stop above.",
+               inputOptions: String.IntentInputOptions(keyboardType: .numberPad))
+    var stopNumber: String?
+
+    func chosenStop() async -> StopEntity {
+        if let stop = await StopChoice.resolve(number: stopNumber) { return stop }
+        return await StopChoice.resolve(stop) ?? .fallback
+    }
 }
 
 struct BusStopEntry: TimelineEntry {
@@ -25,11 +34,11 @@ struct BusStopProvider: AppIntentTimelineProvider {
     func placeholder(in context: Context) -> BusStopEntry { sample() }
 
     func snapshot(for configuration: BusStopConfig, in context: Context) async -> BusStopEntry {
-        context.isPreview ? sample() : await fetch(configuration.stop ?? .fallback).first!
+        context.isPreview ? sample() : await fetch(configuration.chosenStop()).first!
     }
 
     func timeline(for configuration: BusStopConfig, in context: Context) async -> Timeline<BusStopEntry> {
-        let entries = await fetch(configuration.stop ?? .fallback)
+        let entries = await fetch(configuration.chosenStop())
         return Timeline(entries: entries, policy: .after(Date().addingTimeInterval(10 * 60)))
     }
 

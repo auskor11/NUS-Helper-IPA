@@ -9,8 +9,8 @@ struct UpNextConfig: WidgetConfigurationIntent {
     static var title: LocalizedStringResource = "Up next"
     static var description = IntentDescription("Your next class and the shuttle to catch to get there.")
 
-    @Parameter(title: "I usually leave from")
-    var stop: StopEntity?
+    @Parameter(title: "I usually leave from", optionsProvider: NUSStopOptions())
+    var stop: String?
 }
 
 struct ShuttlePlan {
@@ -61,7 +61,8 @@ struct UpNextProvider: AppIntentTimelineProvider {
               let (dest, walkEnd) = ShuttleRouting.nearestStop(data.stops, lat: lat, lng: lng), walkEnd < 700 else {
             return UpNextEntry(date: now, occurrence: o, plan: nil, note: "No shuttle stop near this venue")
         }
-        let origin = data.stops.first { $0.code == (config.stop?.isNUS == true ? config.stop!.id : "") }
+        let chosen = await StopChoice.resolve(config.stop)
+        let origin = data.stops.first { $0.code == (chosen?.isNUS == true ? chosen!.id : "") }
             ?? data.stops.first { $0.code == StopEntity.fallback.id }
         guard let origin else { return UpNextEntry(date: now, occurrence: o, plan: nil, note: nil) }
         if origin.code == dest.code {

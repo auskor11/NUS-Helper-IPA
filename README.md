@@ -76,7 +76,9 @@ Press and hold the home screen → Edit → Add Widget → NUS Companion.
 
 - **Next class** (small, lock screen): what's on now or next, with a countdown. Works offline.
 - **Up next** (medium): the next class and the NUS shuttle to catch from your usual stop (press and hold the widget → Edit Widget). It picks the latest bus that still gets you there on time, using live times.
-- **Bus stop** (small, medium, lock screen): live NUS shuttle and public bus arrivals at a stop you pick, with a refresh button.
+- **Bus stop** (small, medium, lock screen): live NUS shuttle and public bus arrivals at a stop you pick, with a refresh button. Press and hold → Edit Widget: **Stop** lists NUS stops and public stops near NUS; **Bus stop no.** takes any public stop's 5-digit number (on the stop's sign) and overrides **Stop**.
+
+Widget settings store stops as text labels, not App Intents entities: iOS failed to look entities back up, so the widgets always fell back to Central Library.
 
 The app writes the schedule, NUS stops and shuttle routes to the `group.auskor.NUS-Helper` App Group (`WidgetBridgePlugin.swift`, called from `native/native-app.js`); the widgets in `ios/App/TripActivity/` read it and fetch live bus times themselves. Widget taps open the app via `nuscompanion://open/<route>`. Home screen widgets refresh about every 10 minutes (iOS sets the limit); between refreshes the minutes count down on their own.
 
