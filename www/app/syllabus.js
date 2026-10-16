@@ -8,6 +8,13 @@
 const SYLLABUS_FORMAT="nus-companion-syllabus";
 const ASSESSMENT_TYPES=["exam","quiz","assignment","project","presentation","lab","other"];
 
+// Weights are percentages of the final grade. Older files gave "20%".
+function weightValue(v){
+  const n=parseFloat(String(v??"").replace(/[^0-9.]/g,""));
+  return Number.isFinite(n)&&n>0&&n<=100 ? n : null;
+}
+function weightLabel(w){ const n=weightValue(w); return n==null?"":`${+n.toFixed(2)}%`; }
+
 function syllabusModule(code){
   return (state.syllabus?.modules||[]).find(m=>m.code===code)||null;
 }
@@ -56,9 +63,11 @@ function syllabusPrompt(){
   const day=n=>start?addDays(start,n).toLocaleDateString("en-SG",{weekday:"short",day:"numeric",month:"short",year:"numeric"}):"";
   const calendar=start?`- AY${state.semester.academicYear} Semester ${state.semester.semester}: Week 1 starts ${day(0)}. Weeks 1–6, then Recess week (${day(42)} – ${day(48)}), Week 7 starts ${day(49)}, Week 13 ends ${day(97)}, Reading week ${day(98)} – ${day(104)}, exams ${day(105)} – ${day(118)}.\n`:"";
   const codes=state.modules.map(m=>m.code).join(", ");
-  return `I've attached the semester outline PDFs for my NUS modules (one per module). Read every PDF, including any tables of weekly topics and assessment breakdowns, and turn them into one JSON file for my NUS Companion app. Give me the file to download as syllabus.json.
+  return `I've attached the course materials for my NUS modules. They can be any mix of file types: PDFs (including scanned ones), screenshots or photos, lecture slides (PowerPoint, Keynote or Google Slides), Word documents, or text I paste. One module's information may be spread across several files, for example a schedule screenshot plus a slide with the assessment breakdown, and one file may cover several modules.
 
-If an outline has no weekly schedule, still include its assessments. If a PDF is unreadable or isn't a module outline, tell me which one instead of guessing.
+Read every file and image fully, including tables, slide notes and small print. Work out which module each one belongs to from its content (module code or title), combine everything for the same module, and turn it all into one JSON file for my NUS Companion app. Give me the file to download as syllabus.json.
+
+Then list, under the file: each module and which files you used for it, anything that contradicted itself across files (say which you chose), any file you couldn't read or that isn't course material, and any module whose weights don't add up to 100%. If you can't open a file type (for example .pptx), ask me to export it as PDF instead of guessing.
 
 Use exactly this shape:
 {
@@ -74,7 +83,9 @@ Use exactly this shape:
         { "week": 1, "topic": "Introduction, sorting", "lecture": "Asymptotic analysis; sorting", "tutorial": "No tutorial", "lab": "Lab 0: setup", "readings": "CLRS ch. 2", "notes": "" }
       ],
       "assessments": [
-        { "title": "Midterm test", "type": "exam", "date": "2026-10-03", "time": "10:00", "endTime": "11:30", "week": 7, "weight": "20%", "venue": "MPSH 1", "notes": "Closed book, one A4 cheat sheet" }
+        { "title": "Midterm test", "type": "exam", "date": "2026-10-03", "time": "10:00", "endTime": "11:30", "week": 7, "weight": 20, "venue": "MPSH 1", "notes": "Closed book, one A4 cheat sheet" },
+        { "title": "Problem sets (best 8 of 9)", "type": "assignment", "weight": 24, "notes": "3% each, due Sundays 23:59" },
+        { "title": "Tutorial participation", "type": "other", "weight": 5 }
       ]
     }
   ]
@@ -83,9 +94,10 @@ Use exactly this shape:
 Rules:
 - "week" is the NUS teaching week number (1–13), or "recess", "reading" or "exam".
 ${calendar}- Dates are YYYY-MM-DD and times are 24-hour HH:MM (Singapore time). If a source gives only a week for an assessment, set "week" and leave out "date"; work out the date from the calendar above only when the source gives the day.
+- "weight" is the percentage of the final grade as a plain number (20, not "20%"). Include every graded component, including ones without a date such as participation or attendance, so the weights add up to 100. When a group of similar items has dates (e.g. Lab 1 to Lab 10), list each with its own weight; otherwise give the group as one entry with its total weight and explain the rule in "notes".
 - "type" is one of: ${ASSESSMENT_TYPES.join(", ")}.
-- Keep each text short (one line). Leave out any field the source doesn't say; don't guess.
-- One entry per module code, with every week that has content and every graded component (assignments, quizzes, tests, projects, the final exam).${codes?`\n- My modules this semester: ${codes}.`:""}`;
+- Keep each text short (one line). Leave out any field the sources don't say; don't guess.
+- One entry per module code, with every week that has content.${codes?`\n- My modules this semester: ${codes}.`:""}`;
 }
 
 /* ---------- Import ---------- */
@@ -118,7 +130,7 @@ function parseSyllabus(text){
       time:/^\d{1,2}:\d{2}$/.test(str(a.time))?minutesToInput(timeToMinutes(str(a.time))):"",
       endTime:/^\d{1,2}:\d{2}$/.test(str(a.endTime))?minutesToInput(timeToMinutes(str(a.endTime))):"",
       week:typeof weekKey(a.week)==="number"?weekKey(a.week):null,
-      weight:str(a.weight), venue:str(a.venue), notes:str(a.notes)
+      weight:weightValue(a.weight), venue:str(a.venue), notes:str(a.notes)
     })).filter(a=>a.title);
     return {code,title:str(m.title||m.name),weeks,assessments};
   }).filter(Boolean);
@@ -130,6 +142,11 @@ function parseSyllabus(text){
 // With addTasks, dated assessments become tasks (kept in step on re-import).
 function importSyllabus(modules,{addTasks=true}={}){
   const codes=new Set(modules.map(m=>m.code));
+  // Scores you've entered survive a re-import of the same module.
+  const key=(code,title)=>`${code}|${title.toLowerCase().replace(/[^a-z0-9]+/g," ").trim()}`;
+  const scores=new Map();
+  for(const m of state.syllabus?.modules||[]) for(const a of m.assessments||[]) if(a.score!=null) scores.set(key(m.code,a.title),{score:a.score,scoreText:a.scoreText});
+  for(const m of modules) for(const a of m.assessments) Object.assign(a,scores.get(key(m.code,a.title))||{});
   state.syllabus={modules:[...(state.syllabus?.modules||[]).filter(m=>!codes.has(m.code)),...modules]
     .sort((a,b)=>a.code.localeCompare(b.code)),importedAt:Date.now()};
   let tasks=0;
@@ -142,7 +159,7 @@ function importSyllabus(modules,{addTasks=true}={}){
         // Past ones arrive done so they don't show up as overdue.
         const past=new Date(`${a.date}T${a.time||"23:59"}:00`)<new Date();
         state.tasks.push({id,source:"syllabus",done:done.has(id)?done.get(id):past,module:m.code,
-          title:a.weight?`${a.title} (${a.weight})`:a.title,dueDate:a.date,dueTime:a.time||""});
+          title:a.weight!=null?`${a.title} (${weightLabel(a.weight)})`:a.title,dueDate:a.date,dueTime:a.time||""});
         tasks++;
       }
     }
@@ -182,11 +199,11 @@ function openSyllabusHelp(){
   openModal(`<h2>Make your syllabus file</h2>
     <ol class="steps">
       <li>Copy the prompt below</li>
-      <li>In a new Claude chat, paste it and attach your modules' <b>semester outline PDFs</b> (the + or paperclip button). Attach them all at once, or one module per chat</li>
+      <li>In a new Claude chat, paste it and attach your modules' course materials with the + or paperclip button: outline PDFs, screenshots, slides or Word files, in any mix. Attach everything at once, or one module per chat</li>
       <li>Download the <b>syllabus.json</b> Claude makes. On iPhone, tap the file, then Share → Save to Files</li>
       <li>Come back and tap <b>Import or update</b> → Choose file</li>
     </ol>
-    <p class="small-help">Doing one module at a time is fine: importing a file only replaces the modules in it. If a module's outline changes, make a new file for just that module and import it.</p>
+    <p class="small-help">One file can hold all your modules, or you can do one module at a time: importing only replaces the modules in the file, and keeps any scores you've entered. If Claude can't open a file (some .pptx), export it as PDF and attach that instead.</p>
     <button class="btn primary full" id="copyPrompt">${icon("M8 8h12v12H8zM4 16V4h12",18)}Copy prompt</button>
     <pre class="prompt-box">${esc(prompt)}</pre>`,{wide:true});
   $("#copyPrompt").onclick=async()=>{
@@ -213,7 +230,7 @@ function assessmentRowHTML(a,{showModule=true}={}){
   return `<div class="assess-row t-${esc(a.type)} ${past?"past":""}">
     <span class="assess-bar"></span>
     <div class="assess-main">
-      <b>${showModule?`<span class="mod-tag">${esc(a.module)}</span>`:""}${esc(a.title)}${a.weight?` <span class="assess-weight">${esc(a.weight)}</span>`:""}</b>
+      <b>${showModule?`<span class="mod-tag">${esc(a.module)}</span>`:""}${esc(a.title)}${weightValue(a.weight)!=null?` <span class="assess-weight">${esc(weightLabel(a.weight))}</span>`:""}</b>
       <small>${esc(assessmentWhen(a))}${a.venue?` · ${esc(a.venue)}`:""}</small>
       ${a.notes?`<small class="assess-notes">${esc(a.notes)}</small>`:""}
     </div>
@@ -262,6 +279,8 @@ function syllabusViewHTML(date){
     <div class="card flush assess-list">${upcoming.length?upcoming.map(a=>assessmentRowHTML(a)).join(""):`<div class="empty-inline">No upcoming assessments.</div>`}
       ${past.length?`<details class="assess-past"><summary>${past.length} past</summary>${past.reverse().map(a=>assessmentRowHTML(a)).join("")}</details>`:""}
     </div>
+    <h3 class="section-title">Grades</h3>
+    ${mods.map(gradeCardHTML).join("")}
     <div class="syl-actions">
       <button class="btn secondary" id="sylImportBtn">Import or update</button>
       <button class="btn ghost" id="sylHelp">Make the file with Claude</button>
@@ -269,7 +288,78 @@ function syllabusViewHTML(date){
     </div>`;
 }
 
+/* ---------- Grades ---------- */
+// Each module's graded components with their weights, and the scores you
+// enter: what you've earned so far and how much of the grade is still to come.
+
+function gradeSummary(m){
+  const comps=(m.assessments||[]).filter(a=>weightValue(a.weight)!=null);
+  const total=comps.reduce((n,a)=>n+weightValue(a.weight),0);
+  const graded=comps.filter(a=>a.score!=null);
+  const gradedWeight=graded.reduce((n,a)=>n+weightValue(a.weight),0);
+  const earned=graded.reduce((n,a)=>n+weightValue(a.weight)*a.score/100,0);
+  return {comps,total,gradedWeight,earned,remaining:Math.max(0,total-gradedWeight)};
+}
+
+const pctText=n=>`${+n.toFixed(1)}%`;
+
+function gradeCardHTML(m){
+  const g=gradeSummary(m);
+  if(!g.comps.length) return `<div class="card grade-card"><div class="syl-head"><b>${esc(m.code)}</b></div><p class="subtle syl-none">No weightage in the file.</p></div>`;
+  const scale=Math.max(100,g.total);
+  return `<div class="card grade-card">
+    <div class="syl-head"><b>${esc(m.code)}</b><small>${g.gradedWeight?`${pctText(g.earned)} earned of ${pctText(g.gradedWeight)} graded · ${pctText(g.earned/g.gradedWeight*100)} average`:"No scores yet"}</small></div>
+    <div class="grade-bar" title="Earned, lost and still to come">
+      <span class="earned" style="width:${g.earned/scale*100}%"></span>
+      <span class="lost" style="width:${(g.gradedWeight-g.earned)/scale*100}%"></span>
+      <span class="left" style="width:${g.remaining/scale*100}%"></span>
+    </div>
+    <p class="grade-legend"><i class="earned"></i>Earned <i class="lost"></i>Lost <i class="left"></i>${pctText(g.remaining)} still to come</p>
+    ${Math.abs(g.total-100)>0.5?`<div class="grade-warn">Weights add up to ${pctText(g.total)}, not 100%. Check the outline or add the missing component in a new file.</div>`:""}
+    <div class="grade-rows">${(m.assessments||[]).map((a,i)=>weightValue(a.weight)==null?"":`
+      <button class="grade-row" data-grade="${esc(m.code)}|${i}">
+        <span class="grade-title">${esc(a.title)}<small>${esc(weightLabel(a.weight))}</small></span>
+        <span class="grade-score ${a.score==null?"empty":""}">${a.score==null?"Add score":`${esc(a.scoreText||pctText(a.score))}<small>+${pctText(weightValue(a.weight)*a.score/100)}</small>`}</span>
+      </button>`).join("")}</div>
+  </div>`;
+}
+
+// "17/20", "85%" or "85" -> 85
+function parseScore(text){
+  const t=String(text||"").trim();
+  const frac=t.match(/^(\d+(?:\.\d+)?)\s*\/\s*(\d+(?:\.\d+)?)$/);
+  if(frac&&+frac[2]>0) return Math.min(100,+frac[1]/+frac[2]*100);
+  const n=parseFloat(t.replace("%",""));
+  return Number.isFinite(n)&&n>=0&&n<=100?n:null;
+}
+
+function openScoreSheet(code,i){
+  const m=syllabusModule(code), a=m?.assessments?.[i];
+  if(!a) return;
+  openModal(`<p class="kicker">${esc(code)} · ${esc(weightLabel(a.weight))} OF FINAL GRADE</p><h2>${esc(a.title)}</h2>
+    <form class="form" id="scoreForm">
+      <input class="input big" name="score" value="${esc(a.scoreText||"")}" placeholder="e.g. 17/20 or 85%" inputmode="decimal" autocomplete="off" autofocus>
+      <div id="scoreHint" class="small-help">Enter marks as a fraction or a percentage.</div>
+      <button class="btn primary full">Save score</button>
+      ${a.score!=null?`<button type="button" class="btn ghost full" id="clearScore">Clear score</button>`:""}
+    </form>`);
+  const form=$("#scoreForm");
+  form.score.oninput=()=>{
+    const p=parseScore(form.score.value);
+    $("#scoreHint").textContent=p==null?"Enter marks as a fraction or a percentage.":`${pctText(p)} → ${pctText(weightValue(a.weight)*p/100)} of your final grade`;
+  };
+  form.onsubmit=e=>{
+    e.preventDefault();
+    const p=parseScore(form.score.value);
+    if(p==null){ $("#scoreHint").textContent="That doesn't look like a score. Try 17/20 or 85%."; return; }
+    a.score=p; a.scoreText=form.score.value.trim();
+    closeModal(); save(); toast("Score saved");
+  };
+  $("#clearScore")?.addEventListener("click",()=>{ delete a.score; delete a.scoreText; closeModal(); save(); });
+}
+
 function bindSyllabusView(el){
+  $$("[data-grade]",el).forEach(b=>b.onclick=()=>{ const [code,i]=b.dataset.grade.split("|"); openScoreSheet(code,+i); });
   $("#sylHelp",el)?.addEventListener("click",openSyllabusHelp);
   $("#sylImportBtn",el)?.addEventListener("click",openSyllabusImporter);
   $("#sylClear",el)?.addEventListener("click",async()=>{
