@@ -213,6 +213,10 @@ struct StopEntity {
     let name: String
     let isNUS: Bool
     let publicCode: String?
+    /// Set when pinned from a route: the bus(es) to catch here, shown first,
+    /// and where the ride goes.
+    var priority: [String] = []
+    var routeTo: String? = nil
 
     static let fallback = StopEntity(id: "CLB", name: "Central Library", isNUS: true, publicCode: "16181")
 }
@@ -231,7 +235,8 @@ enum StopChoice {
         guard let json = AppGroup.defaults?.string(forKey: "widget.pinnedStop.v1"),
               let obj = (try? JSONSerialization.jsonObject(with: Data(json.utf8))) as? [String: Any],
               let id = obj["id"] as? String, let name = obj["name"] as? String else { return nil }
-        return StopEntity(id: id, name: name, isNUS: obj["isNUS"] as? Bool ?? false, publicCode: obj["publicCode"] as? String)
+        return StopEntity(id: id, name: name, isNUS: obj["isNUS"] as? Bool ?? false, publicCode: obj["publicCode"] as? String,
+                          priority: obj["services"] as? [String] ?? [], routeTo: obj["to"] as? String)
     }
 
     static func label(_ stop: StopEntity) -> String { "\(stop.name) · \(stop.isNUS ? nusTag : stop.id)" }

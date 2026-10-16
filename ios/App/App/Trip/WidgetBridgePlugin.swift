@@ -5,7 +5,7 @@ import WidgetKit
 /// JS bridge: `Capacitor.Plugins.WidgetBridge.update({ data: JSON string })`.
 /// Saves the schedule/stops snapshot the home screen widgets read (see
 /// TripActivity/WidgetShared.swift) and asks iOS to redraw them.
-/// `pinStop({ id, name, isNUS, publicCode })` sets the stop shown by Bus stop
+/// `pinStop({ id, name, isNUS, publicCode, services?, to? })` sets the stop shown by Bus stop
 /// widgets set to "Chosen in the app" (the Show on widget button on the map).
 @objc(WidgetBridgePlugin)
 public class WidgetBridgePlugin: CAPPlugin, CAPBridgedPlugin {
@@ -23,6 +23,9 @@ public class WidgetBridgePlugin: CAPPlugin, CAPBridgedPlugin {
         }
         var stop: [String: Any] = ["id": id, "name": name, "isNUS": call.getBool("isNUS") ?? false]
         if let code = call.getString("publicCode") { stop["publicCode"] = code }
+        // From a route: the bus to catch here and where it goes.
+        if let services = call.getArray("services", String.self), !services.isEmpty { stop["services"] = services }
+        if let to = call.getString("to") { stop["to"] = to }
         if let data = try? JSONSerialization.data(withJSONObject: stop), let json = String(data: data, encoding: .utf8) {
             defaults.set(json, forKey: "widget.pinnedStop.v1")
         }

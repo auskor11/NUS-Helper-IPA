@@ -38,14 +38,15 @@ views.map=(()=>{
     return `<button class="chip widget-btn ${on?"on":""}" ${attrs}>${icon(on?"M20 6 9 17l-5-5":WIDGET_ICON,14)}${on?"On your widget":"Show on widget"}</button>`;
   }
 
-  async function pinWidgetStop(src,btn){
+  // From a route step, `ride` = {service, to} puts that bus first on the widget.
+  async function pinWidgetStop(src,btn,ride=null){
     try{
       const info=await widgetStopFor(src);
-      await WidgetBridge.pinStop(info);
+      await WidgetBridge.pinStop(ride?{...info,services:[String(ride.service)],to:ride.to}:info);
       try{ localStorage.setItem("nus_widget_stop",src.code); }catch{}
       $$(".widget-btn.on",el).forEach(b=>{ b.classList.remove("on"); b.innerHTML=`${icon(WIDGET_ICON,14)}Show on widget`; });
       if(btn){ btn.classList.add("on"); btn.innerHTML=`${icon("M20 6 9 17l-5-5",14)}On your widget`; }
-      toast(`Bus stop widget: ${info.name}`);
+      toast(ride?`Widget: bus ${ride.service} at ${info.name}`:`Bus stop widget: ${info.name}`);
     }catch(err){ toast(`Couldn't update the widget: ${err.message||err}`); }
   }
   let tripActive=false;
@@ -554,7 +555,7 @@ views.map=(()=>{
       bindFooter(()=>transitPlan(it));
       $$("[data-pin-leg]",el).forEach(b=>b.onclick=()=>{
         const l=it.legs[+b.dataset.pinLeg];
-        pinWidgetStop({code:l.from.code,name:l.from.name,lat:l.from.lat,lng:l.from.lng,nus:l.mode==="SHUTTLE"},b);
+        pinWidgetStop({code:l.from.code,name:l.from.name,lat:l.from.lat,lng:l.from.lng,nus:l.mode==="SHUTTLE"},b,{service:l.line,to:l.to.name});
       });
       $("#routeOptions",el).onclick=()=>{ view="list"; renderTransitList(); };
       drawTransit(it);

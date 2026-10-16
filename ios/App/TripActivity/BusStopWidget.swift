@@ -55,7 +55,11 @@ struct BusStopProvider: AppIntentTimelineProvider {
                 let times = a.times.filter { $0 > at.addingTimeInterval(-30) }
                 return times.isEmpty ? nil : Arrival(service: a.service, isShuttle: a.isShuttle, times: times,
                                                      deck: times.count == a.times.count ? a.deck : nil)
-            }.sorted { $0.times[0] < $1.times[0] }
+            }.sorted {
+                // The bus to catch on your route first, then soonest first.
+                let p0 = stop.priority.contains($0.service), p1 = stop.priority.contains($1.service)
+                return p0 != p1 ? p0 : $0.times[0] < $1.times[0]
+            }
             return BusStopEntry(date: at, stop: stop, arrivals: upcoming, fetchedAt: now)
         }
     }
@@ -94,7 +98,7 @@ struct BusStopView: View {
     }
 
     private var full: some View {
-        let rows = family == .systemSmall ? 3 : 4
+        let rows = (family == .systemSmall ? 3 : 4) - (entry.stop.priority.isEmpty ? 0 : 1)
         return VStack(alignment: .leading, spacing: 5) {
             HStack(spacing: 4) {
                 Text(entry.stop.name).font(.system(size: 13, weight: .bold)).lineLimit(1)
@@ -110,7 +114,11 @@ struct BusStopView: View {
                 Text("No buses right now").font(.caption).foregroundStyle(.white.opacity(0.65))
                 Spacer()
             } else {
+                if !entry.stop.priority.isEmpty, !entry.arrivals.contains(where: { entry.stop.priority.contains($0.service) }) {
+                    Text("No \(entry.stop.priority.joined(separator: "/")) right now").font(.caption2.weight(.semibold)).foregroundStyle(.orange)
+                }
                 ForEach(entry.arrivals.prefix(rows)) { a in
+                    if entry.stop.priority.contains(a.service) { routeRow(a) } else {
                     HStack(spacing: 6) {
                         ServiceBadge(service: a.service, isShuttle: a.isShuttle)
                         Text(minutesText(a.times[0], from: entry.date) + (minutesText(a.times[0], from: entry.date) == "Arr" ? "" : " min"))
@@ -126,12 +134,32 @@ struct BusStopView: View {
                                 .font(.caption2).foregroundStyle(.white.opacity(0.6)).lineLimit(1)
                         }
                     }
+                    }
                 }
                 Spacer(minLength: 0)
             }
             Text("Updated \(entry.fetchedAt.formatted(date: .omitted, time: .shortened))").font(.system(size: 9)).foregroundStyle(.white.opacity(0.45))
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+    }
+
+    /// Your bus on the route: every time, larger, with where it takes you.
+    private func routeRow(_ a: Arrival) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            HStack(spacing: 6) {
+                ServiceBadge(service: a.service, isShuttle: a.isShuttle)
+                Text(a.times.prefix(3).map { minutesText($0, from: entry.date) }.joined(separator: " · ") + (minutesText(a.times[0], from: entry.date) == "Arr" && a.times.count == 1 ? "" : " min"))
+                    .font(.system(size: 15, weight: .bold)).lineLimit(1).minimumScaleFactor(0.7)
+                if let deck = a.deckLabel {
+                    Text(deck).font(.system(size: 9, weight: .semibold)).foregroundStyle(.white.opacity(0.7))
+                }
+            }
+            Text(entry.stop.routeTo.map { "Your bus · to \($0)" } ?? "Your bus")
+                .font(.system(size: 9, weight: .semibold)).foregroundStyle(Color.accentCyan).lineLimit(1)
+        }
+        .padding(.horizontal, 6).padding(.vertical, 4)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color.white.opacity(0.08), in: RoundedRectangle(cornerRadius: 8))
     }
 
     private func times(_ a: Arrival) -> String {
