@@ -63,7 +63,12 @@ views.courses=(()=>{
         <b>${esc(aw?.label||"This week")}<small class="toolbar-sub">${esc(range)}</small></b>
         <button class="icon-btn sm" id="nextWeek" aria-label="Next week">${icon("M9 18l6-6-6-6",18)}</button>
       </div>
-      ${due.length?`<div class="card due-card"><h4>Due this week</h4>${due.map(a=>assessmentRowHTML(a)).join("")}</div>`:""}
+      <div class="courses-week">
+      <aside class="cw-side">
+        ${due.length?`<div class="card due-card"><h4>Assessments this week</h4>${due.map(a=>assessmentRowHTML(a)).join("")}</div>`:""}
+        ${sideExtrasHTML(mods,start)}
+      </aside>
+      <div class="cw-main">
       ${mods.map(m=>{
         const w=syllabusWeek(m.code,selected);
         return `<button class="card syl-card tap" data-go="courses/module" data-params='${esc(JSON.stringify({code:m.code}))}'>
@@ -71,7 +76,27 @@ views.courses=(()=>{
           ${w?`${w.topic?`<p class="syl-topic">${esc(w.topic)}</p>`:""}${syllabusLinesHTML(w)}`
             :`<p class="subtle syl-none">${aw&&aw.kind!=="teaching"?esc(aw.label):"Nothing listed this week."}</p>`}
         </button>`;
-      }).join("")}`;
+      }).join("")}
+      </div></div>`;
+  }
+
+  // Wide screens only (hidden on phones): what's coming after this week, and
+  // each module's grade at a glance.
+  function sideExtrasHTML(mods,weekStart){
+    const later=allAssessments().filter(a=>(a.date||a.week)&&a.when&&a.when>=addDays(weekStart,7)).slice(0,4);
+    return `<div class="cw-extra">
+      ${later.length?`<div class="card side-card"><div class="side-head"><h4>Coming up</h4><button class="link" data-mode="assess">See all</button></div>
+        ${later.map(a=>assessmentRowHTML(a)).join("")}</div>`:""}
+      <div class="card side-card"><div class="side-head"><h4>Grades</h4><button class="link" data-mode="grades">Details</button></div>
+        ${mods.map(m=>{
+          const g=gradeSummary(m), scale=Math.max(100,g.total||100);
+          return `<button class="side-grade" data-go="courses/module" data-params='${esc(JSON.stringify({code:m.code,tab:"grades"}))}'>
+            <span><b>${esc(m.code)}</b><small>${g.gradedWeight?`${pctText(g.earned)} of ${pctText(g.gradedWeight)}`:"No scores yet"}</small></span>
+            <span class="grade-bar"><span class="earned" style="width:${g.earned/scale*100}%"></span><span class="lost" style="width:${(g.gradedWeight-g.earned)/scale*100}%"></span><span class="left" style="width:${g.remaining/scale*100}%"></span></span>
+          </button>`;
+        }).join("")}
+      </div>
+    </div>`;
   }
 
   function gradesView(mods){

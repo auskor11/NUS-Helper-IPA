@@ -348,7 +348,18 @@ function itemsOnDate(date){
     const due=timeToMinutes(t.dueTime||"23:59");
     return {kind:"task", id:t.id, ref:t, title:t.title, subtitle:t.module?`${t.module} · due`:"Due", start:due, end:due, done:t.done};
   });
-  return [...lessons,...acts,...tasks]
+  // Assessments from the syllabus (app/syllabus.js) are their own kind, not tasks.
+  const iso=isoDate(date), assess=[];
+  for(const m of state.syllabus?.modules||[]){
+    (m.assessments||[]).forEach((a,i)=>{
+      if(a.date!==iso) return;
+      const start=timeToMinutes(a.time||"23:59"), end=a.endTime?timeToMinutes(a.endTime):start;
+      const w=parseFloat(String(a.weight??"").replace(/[^0-9.]/g,""));
+      assess.push({kind:"assessment", id:`${m.code}|${i}`, ref:a, title:a.title,
+        subtitle:`${m.code}${Number.isFinite(w)?` · ${+w.toFixed(2)}%`:""}${a.time?"":" · due"}`, venue:a.venue||"", start, end});
+    });
+  }
+  return [...lessons,...acts,...assess,...tasks]
     .filter(x=>x.start!=null)
     .sort((a,b)=>a.start-b.start || (a.kind==="task")-(b.kind==="task"));
 }
@@ -359,7 +370,7 @@ function nextEvent(){
   const nowMin=now.getHours()*60+now.getMinutes();
   for(let i=0;i<8;i++){
     const date=addDays(now,i);
-    const items=itemsOnDate(date).filter(x=>x.kind!=="task" && x.end!=null);
+    const items=itemsOnDate(date).filter(x=>(x.kind==="lesson"||x.kind==="activity") && x.end!=null);
     const found=i===0 ? items.find(x=>x.end>nowMin) : items[0];
     if(found){
       const start=new Date(date); start.setHours(0,found.start,0,0);

@@ -106,6 +106,7 @@ function openScheduleItem(kind,id,date=null){
   if(kind==="lesson"){ const l=state.lessons.find(x=>x.id===id); if(l) openLessonSheet(l,date); }
   if(kind==="activity"){ const a=state.activities.find(x=>x.id===id); if(a) openActivitySheet(a); }
   if(kind==="task"){ const t=state.tasks.find(x=>x.id===id); if(t) openTaskForm(t); }
+  if(kind==="assessment") go("courses/module",{code:id.split("|")[0],tab:"assess"});
 }
 
 /* ---------- View ---------- */
@@ -170,13 +171,25 @@ views.schedule=(()=>{
         <div class="week-axis">${Array.from({length:hours},(_,i)=>`<div>${(HOUR_START+i)%12||12}${HOUR_START+i<12?"a":"p"}</div>`).join("")}</div>
         ${days.map((d,i)=>`<div class="week-col" style="grid-column:${i+2}">
           ${itemsOnDate(d).map(x=>{
-            const s=Math.max(HOUR_START*60,x.start), e=Math.min(HOUR_END*60,x.kind==="task"?x.start+30:x.end);
+            const s=Math.max(HOUR_START*60,x.start), e=Math.min(HOUR_END*60,x.end>x.start?x.end:x.start+30);
             if(e<=s) return "";
             return `<button class="week-ev kind-${x.kind}" style="top:${(s-HOUR_START*60)/60*ROW}px;height:${Math.max(24,(e-s)/60*ROW-2)}px" data-open="${x.kind}" data-id="${esc(x.id)}" data-day="${isoDate(d)}"><b>${esc(x.title)}</b><small>${esc(x.venue||x.subtitle||"")}</small></button>`;
           }).join("")}
           ${sameDay(d,now)&&nowMin>=HOUR_START*60&&nowMin<=HOUR_END*60?`<div class="now-line" style="top:${(nowMin-HOUR_START*60)/60*ROW}px"></div>`:""}
         </div>`).join("")}
       </div></div>`;
+  }
+
+  // Wide screens show what's on each day by name (styles.css hides this on
+  // phones, which keep the dots): assessments, tasks and activities, then a
+  // count of classes.
+  function monthCellItems(d){
+    const items=itemsOnDate(d).filter(x=>x.kind!=="lesson"&&!(x.kind==="task"&&x.done));
+    const classes=itemsOnDate(d).filter(x=>x.kind==="lesson").length;
+    const shown=items.slice(0,3);
+    return `<span class="mc-items">${shown.map(x=>`<span class="mc-item kind-${x.kind}">${esc(x.kind==="assessment"?`${x.subtitle.split(" · ")[0]} ${x.title}`:x.title)}</span>`).join("")}
+      ${items.length>3?`<span class="mc-more">+${items.length-3} more</span>`:""}
+      ${classes?`<span class="mc-more">${classes} class${classes===1?"":"es"}</span>`:""}</span>`;
   }
 
   function monthView(){
@@ -193,15 +206,17 @@ views.schedule=(()=>{
         ${["M","T","W","T","F","S","S"].map(d=>`<div class="month-dow">${d}</div>`).join("")}
         ${cells.map(d=>{
           const tasks=state.tasks.filter(t=>t.dueDate===isoDate(d)&&!t.done).length;
+          const assess=(state.syllabus?.modules||[]).some(m=>(m.assessments||[]).some(a=>a.date===isoDate(d)));
           const acts=state.activities.filter(a=>activityOccursOnDate(a,d)).length;
           const lessons=state.lessons.some(l=>lessonOccursOnDate(l,d));
           return `<button class="month-cell ${d.getMonth()===m?"":"out"} ${sameDay(d,now)?"today":""}" data-date="${isoDate(d)}">
             <b>${d.getDate()}</b>
-            <span class="dots">${lessons?`<i class="d-lesson"></i>`:""}${acts?`<i class="d-activity"></i>`:""}${tasks?`<i class="d-task"></i>`:""}</span>
+            <span class="dots">${lessons?`<i class="d-lesson"></i>`:""}${acts?`<i class="d-activity"></i>`:""}${assess?`<i class="d-assessment"></i>`:""}${tasks?`<i class="d-task"></i>`:""}</span>
+            ${monthCellItems(d)}
           </button>`;
         }).join("")}
       </div>
-      <div class="legend"><span><i class="d-lesson"></i>Classes</span><span><i class="d-activity"></i>Activities</span><span><i class="d-task"></i>Deadlines</span></div>`;
+      <div class="legend"><span><i class="d-lesson"></i>Classes</span><span><i class="d-activity"></i>Activities</span><span><i class="d-assessment"></i>Assessments</span><span><i class="d-task"></i>Tasks</span></div>`;
   }
 
   function render(){

@@ -166,6 +166,7 @@ function renderShell(){
     <nav class="tabbar" aria-label="Main">
       <div class="tabbar-brand"><div class="brand-mark">N</div><span>NUS Companion</span></div>
       ${TABS.map(t=>`<a class="tab" href="#/${t.name}" data-tab="${t.name}">${icon(t.icon)}<span>${t.label}</span></a>`).join("")}
+      <a class="tab tab-settings" href="#/more" data-tab="more">${icon(SETTINGS_ICON)}<span>Settings</span></a>
     </nav>
     <main id="views"></main>
     <div class="sheet-backdrop" id="sheetBackdrop" hidden>

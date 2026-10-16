@@ -1,8 +1,8 @@
 /* Syllabus: what each module covers week by week, and its assessments.
  * The file is made by Claude from the module's lesson plan (the prompt is in
  * syllabusPrompt) and imported here. Shown in the Courses tab (app/courses.js)
- * and as the topic line on lessons in the Day view. Assessments with a
- * date are also added to Tasks so they get reminders.
+ * and as the topic line on lessons in the Day view. Assessments are kept
+ * separate from tasks; dated ones appear on the Schedule calendar.
  */
 
 const SYLLABUS_FORMAT="nus-companion-syllabus";
@@ -149,8 +149,7 @@ function parseSyllabus(text){
 }
 
 // Replaces the syllabus of the modules in the file and keeps the others.
-// With addTasks, dated assessments become tasks (kept in step on re-import).
-function importSyllabus(modules,{addTasks=true}={}){
+function importSyllabus(modules){
   const codes=new Set(modules.map(m=>m.code));
   // Scores you've entered survive a re-import of the same module.
   const key=(code,title)=>`${code}|${title.toLowerCase().replace(/[^a-z0-9]+/g," ").trim()}`;
@@ -159,23 +158,8 @@ function importSyllabus(modules,{addTasks=true}={}){
   for(const m of modules) for(const a of m.assessments) Object.assign(a,scores.get(key(m.code,a.title))||{});
   state.syllabus={modules:[...(state.syllabus?.modules||[]).filter(m=>!codes.has(m.code)),...modules]
     .sort((a,b)=>a.code.localeCompare(b.code)),importedAt:Date.now()};
-  let tasks=0;
-  if(addTasks){
-    const done=new Map(state.tasks.filter(t=>t.source==="syllabus").map(t=>[t.id,t.done]));
-    state.tasks=state.tasks.filter(t=>!(t.source==="syllabus"&&codes.has(t.module)));
-    for(const m of modules){
-      for(const a of m.assessments.filter(a=>a.date)){
-        const id=`syl-${m.code}-${a.title.toLowerCase().replace(/[^a-z0-9]+/g,"-")}-${a.date}`;
-        // Past ones arrive done so they don't show up as overdue.
-        const past=new Date(`${a.date}T${a.time||"23:59"}:00`)<new Date();
-        state.tasks.push({id,source:"syllabus",done:done.has(id)?done.get(id):past,module:m.code,
-          title:a.weight!=null?`${a.title} (${weightLabel(a.weight)})`:a.title,dueDate:a.date,dueTime:a.time||""});
-        tasks++;
-      }
-    }
-  }
   return {modules:modules.length,weeks:modules.reduce((n,m)=>n+m.weeks.length,0),
-    assessments:modules.reduce((n,m)=>n+m.assessments.length,0),tasks};
+    assessments:modules.reduce((n,m)=>n+m.assessments.length,0)};
 }
 
 function openSyllabusImporter(){
@@ -183,7 +167,6 @@ function openSyllabusImporter(){
     <p class="subtle">Choose the <b>syllabus.json</b> file Claude made, or paste its contents.</p>
     <label class="btn secondary full file-btn">${icon("M12 15V3M7 8l5-5 5 5M5 21h14",18)}Choose file<input type="file" id="sylFile" accept=".json,application/json,text/plain" hidden></label>
     <textarea class="input" id="sylText" rows="5" placeholder='{"format":"nus-companion-syllabus", …}'></textarea>
-    <label class="check-row"><input type="checkbox" id="sylTasks" checked> Add assessments with dates to Tasks</label>
     <div id="sylError"></div>
     <button class="btn primary full" id="sylImport">Import</button>
     <p class="small-help">Modules in the file replace the same modules' syllabus. Others are kept.</p>`);
@@ -195,10 +178,10 @@ function openSyllabusImporter(){
     let modules;
     try{ modules=parseSyllabus($("#sylText").value); }
     catch(err){ $("#sylError").innerHTML=`<div class="error-box">${esc(err.message)}</div>`; return; }
-    const r=importSyllabus(modules,{addTasks:$("#sylTasks").checked});
+    const r=importSyllabus(modules);
     save({immediate:true});
     openModal(`<div class="success-hero">${icon("M20 6 9 17l-5-5",36)}</div><h2>Syllabus imported</h2>
-      <p class="subtle">${r.modules} module${r.modules===1?"":"s"} · ${r.weeks} weeks of topics · ${r.assessments} assessment${r.assessments===1?"":"s"}${r.tasks?` · ${r.tasks} added to Tasks`:""}</p>
+      <p class="subtle">${r.modules} module${r.modules===1?"":"s"} · ${r.weeks} weeks of topics · ${r.assessments} assessment${r.assessments===1?"":"s"}</p>
       <button class="btn primary full" id="sylDone">See this week</button>`);
     $("#sylDone").onclick=()=>{ closeModal(); go("courses"); };
   };
@@ -355,9 +338,16 @@ function bindSyllabusActions(el){
   $$("[data-syl=help]",el).forEach(b=>b.onclick=openSyllabusHelp);
   $$("[data-syl=import]",el).forEach(b=>b.onclick=openSyllabusImporter);
   $$("[data-syl=clear]",el).forEach(b=>b.onclick=async()=>{
-    if(!await confirmSheet("Remove the syllabus? Assessments it added to Tasks are removed too.",{confirm:"Remove"})) return;
+    if(!await confirmSheet("Remove the syllabus? Your scores are removed too.",{confirm:"Remove"})) return;
     state.syllabus={modules:[]};
-    state.tasks=state.tasks.filter(t=>t.source!=="syllabus");
     save({immediate:true}); toast("Syllabus removed");
   });
 }
+
+// Earlier versions copied dated assessments into Tasks. Assessments are now
+// their own thing, so remove those copies once the account's data has loaded.
+window.addEventListener("nus-cloud-state-applied",()=>{
+  if(!state.tasks.some(t=>t.source==="syllabus")) return;
+  state.tasks=state.tasks.filter(t=>t.source!=="syllabus");
+  save({immediate:true}).catch(err=>console.warn("Couldn't remove old assessment tasks",err));
+});
