@@ -223,6 +223,16 @@ struct StopEntity {
 /// looked up again and that lookup can fail, leaving the widget on its default.
 enum StopChoice {
     static let nusTag = "NUS shuttle"
+    /// The widget follows the stop picked with "Show on widget" in the app.
+    static let appLabel = "Chosen in the app"
+
+    /// The stop last picked in the app (WidgetBridgePlugin.pinStop), if any.
+    static func pinned() -> StopEntity? {
+        guard let json = AppGroup.defaults?.string(forKey: "widget.pinnedStop.v1"),
+              let obj = (try? JSONSerialization.jsonObject(with: Data(json.utf8))) as? [String: Any],
+              let id = obj["id"] as? String, let name = obj["name"] as? String else { return nil }
+        return StopEntity(id: id, name: name, isNUS: obj["isNUS"] as? Bool ?? false, publicCode: obj["publicCode"] as? String)
+    }
 
     static func label(_ stop: StopEntity) -> String { "\(stop.name) · \(stop.isNUS ? nusTag : stop.id)" }
 
@@ -260,13 +270,16 @@ struct AnyStopOptions: DynamicOptionsProvider {
             !linked.contains(p.stop.id) && nus.contains { ShuttleRouting.distance($0.lat, $0.lng, p.lat, p.lng) < 600 }
         }.map(\.stop)
         let item = { (s: StopEntity) in IntentItem(StopChoice.label(s), title: "\(s.name)", subtitle: s.isNUS ? "NUS shuttle" : "Bus stop \(s.id)") }
+        let follow = IntentItem(StopChoice.appLabel, title: "Chosen in the app",
+                                subtitle: StopChoice.pinned().map { "Now: \($0.name)" } ?? "Tap Show on widget on a stop in the map")
         return ItemCollection(sections: [
+            ItemSection("Follow the app", items: [follow]),
             ItemSection("NUS shuttle stops", items: StopChoice.nusStops().map(item)),
             ItemSection("Public bus stops near NUS", items: nearby.map(item))
         ])
     }
 
-    func defaultResult() async -> String? { StopChoice.label(.fallback) }
+    func defaultResult() async -> String? { StopChoice.appLabel }
 }
 
 /// Stops offered for "I usually leave from" (Up next): NUS shuttle stops only.

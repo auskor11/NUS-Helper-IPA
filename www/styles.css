@@ -669,3 +669,6 @@ body.sheet-open{overflow:hidden}
   .mc-item.kind-activity{border-color:var(--c-activity);background:color-mix(in srgb,var(--c-activity) 14%,transparent)}
   .mc-more{font-size:11px;color:var(--muted);padding-left:4px}
 }
+.widget-btn{margin-top:8px;padding:6px 11px;font-size:12.5px;color:var(--accent);cursor:pointer}
+.widget-btn.on{background:color-mix(in srgb,#22c55e 14%,var(--surface2));border-color:color-mix(in srgb,#22c55e 40%,var(--line));color:#16a34a}
+.map-panel>.widget-btn{margin:10px 0 2px}

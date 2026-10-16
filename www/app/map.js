@@ -12,6 +12,42 @@ views.map=(()=>{
   // Dynamic Island / lock screen trip tracking (iOS app only).
   // Native plugin from ios/App/App/Trip (NUS Helper IPA); absent on the web.
   const TripActivity=isNativeApp()?window.Capacitor?.Plugins?.TripActivity||null:null;
+
+  // "Show on widget": sets the stop shown by Bus stop widgets that follow the
+  // app (WidgetBridgePlugin.pinStop in NUS Helper IPA). iOS app only.
+  const WidgetBridge=isNativeApp()?window.Capacitor?.Plugins?.WidgetBridge||null:null;
+  const WIDGET_ICON="M4 4h7v7H4zM13 4h7v7h-7zM4 13h7v7H4zM13 13h7v7h-7z";
+  const pinnedWidgetKey=()=>{ try{ return localStorage.getItem("nus_widget_stop")||""; }catch{ return ""; } };
+
+  // {id, name, isNUS, publicCode} for a stop: an NUS stop carries the public
+  // stop on the same pole, and a public stop next to an NUS stop becomes that
+  // NUS stop, so the widget shows shuttles and public buses together.
+  async function widgetStopFor({code,name,lat,lng,nus}){
+    if(nus){
+      const s=NUS_STOPS.find(x=>x.code===code);
+      const twin=s?await publicStopNear(s):null;
+      return {id:code,name,isNUS:true,publicCode:twin?.code||null};
+    }
+    const n=NUS_STOPS.find(x=>distanceM(x,{lat,lng})<45);
+    return {id:n?n.code:code,name,isNUS:!!n,publicCode:code};
+  }
+
+  function widgetButtonHTML(attrs,key){
+    if(!WidgetBridge) return "";
+    const on=pinnedWidgetKey()===key;
+    return `<button class="chip widget-btn ${on?"on":""}" ${attrs}>${icon(on?"M20 6 9 17l-5-5":WIDGET_ICON,14)}${on?"On your widget":"Show on widget"}</button>`;
+  }
+
+  async function pinWidgetStop(src,btn){
+    try{
+      const info=await widgetStopFor(src);
+      await WidgetBridge.pinStop(info);
+      try{ localStorage.setItem("nus_widget_stop",src.code); }catch{}
+      $$(".widget-btn.on",el).forEach(b=>{ b.classList.remove("on"); b.innerHTML=`${icon(WIDGET_ICON,14)}Show on widget`; });
+      if(btn){ btn.classList.add("on"); btn.innerHTML=`${icon("M20 6 9 17l-5-5",14)}On your widget`; }
+      toast(`Bus stop widget: ${info.name}`);
+    }catch(err){ toast(`Couldn't update the widget: ${err.message||err}`); }
+  }
   let tripActive=false;
   TripActivity?.addListener("tripEnded",()=>{ tripActive=false; $$("#tripBtn",el).forEach(b=>{ b.textContent="Start trip"; b.classList.replace("danger-soft","primary"); }); });
 
@@ -503,18 +539,23 @@ views.map=(()=>{
       $("#routeBody",el).innerHTML=`
         <button class="link" id="routeOptions">‹ All routes</button>
         <div class="route-summary"><b>${walkMinutes(it.duration)} min</b><span>arrive around ${clockTime(it.end)}</span></div>
-        <ol class="itinerary">${it.legs.map(l=>{
+        <ol class="itinerary">${it.legs.map((l,i)=>{
           if(l.mode==="WALK") return l.distance<20?"":`<li class="it-walk"><span class="it-dot walk">${icon(MODE_ICONS.walk,14)}</span><div><b>Walk ${distanceLabel(l.distance)}</b><small>to ${esc(l.to.name)} · ${walkMinutes(l.duration)} min</small></div></li>`;
           return `<li style="--c:${lineColor(l)}"><span class="it-dot">${icon(legIcon(l),14)}</span><div>
             <b>${esc(transitLabel(l))}</b>${l.headsign?`<small>towards ${esc(l.headsign)}</small>`:""}
             <small>Board at <b>${esc(l.from.name)}</b>${l.from.code&&l.mode==="BUS"?` (${esc(l.from.code)})`:""}${l.mode==="SHUTTLE"?"":` · ${clockTime(l.start)}`}</small>
             ${l===first?`<div class="live-next" id="liveNext"><span class="spinner sm"></span>Checking live arrival…</div>`:""}
+            ${l.from.code?widgetButtonHTML(`data-pin-leg="${i}"`,l.from.code):""}
             <small>${l.stops} stop${l.stops===1?"":"s"}${l.via?.length?` (via ${esc(l.via.join(", "))})`:""} · get off at <b>${esc(l.to.name)}</b></small>
           </div></li>`;
         }).join("")}
         <li class="it-end"><span class="it-dot end">${icon("M12 21s-7-6.2-7-11.5a7 7 0 0 1 14 0C19 14.8 12 21 12 21z",14)}</span><div><b>Arrive at ${esc(title)}</b><small>around ${clockTime(it.end)}</small></div></li>
         </ol>${footer("transit")}`;
       bindFooter(()=>transitPlan(it));
+      $$("[data-pin-leg]",el).forEach(b=>b.onclick=()=>{
+        const l=it.legs[+b.dataset.pinLeg];
+        pinWidgetStop({code:l.from.code,name:l.from.name,lat:l.from.lat,lng:l.from.lng,nus:l.mode==="SHUTTLE"},b);
+      });
       $("#routeOptions",el).onclick=()=>{ view="list"; renderTransitList(); };
       drawTransit(it);
       const showLive=async()=>{
@@ -576,10 +617,12 @@ views.map=(()=>{
       <div class="panel-title"><h2>${esc(stop.name)}</h2><button class="icon-btn sm" id="refreshEta" aria-label="Refresh">${icon("M21 12a9 9 0 1 1-3-6.7L21 8M21 3v5h-5",18)}</button></div>
       <p class="subtle">${[stop.type==="public"&&stop.road?esc(stop.road):"",distanceText(stop).replace(/^ · /,"")].filter(Boolean).join(" · ")}</p>
       ${walkButton()}
+      ${widgetButtonHTML(`id="pinWidget"`,stop.code)}
       <div id="etaMain"><div class="empty-inline"><span class="spinner sm"></span>Loading live times…</div></div>
       <div id="twinBox"></div>
       <p class="updated" id="etaUpdated"></p>`);
     $("#walkHere",el).onclick=()=>showRoute(stop);
+    $("#pinWidget",el)?.addEventListener("click",e=>pinWidgetStop({code:stop.code,name:stop.name,lat:stop.lat,lng:stop.lng,nus:stop.type==="nus"},e.currentTarget));
 
     focusOn(stop,Math.max(map.getZoom(),17));
     const twinHead=()=>twin?`<h4 class="sub-head">${twin.type==="nus"?"NUS shuttles here":"Public buses here"}<small>${esc(twin.type==="nus"?twin.name:`${twin.name} · ${twin.code}`)}</small></h4>`:"";

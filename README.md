@@ -83,6 +83,7 @@ Press and hold the home screen → Edit → Add Widget → NUS Companion.
 
 - **Next class** (small, lock screen): what's on now or next, with a countdown. Works offline.
 - **Up next** (medium): the next class and the NUS shuttle to catch from your usual stop (press and hold the widget → Edit Widget). It picks the latest bus that still gets you there on time, using live times.
+- **Bus stop** follows the app by default: tap **Show on widget** on a stop in the map, or on a bus step in Directions, and the widget switches to that stop. Pick a stop in Edit Widget to fix it instead.
 - **Bus stop** (small, medium, lock screen): live NUS shuttle and public bus arrivals at a stop you pick, with a refresh button. Press and hold → Edit Widget: **Stop** lists NUS stops and public stops near NUS; **Bus stop no.** takes any public stop's 5-digit number (on the stop's sign) and overrides **Stop**.
 
 Widget settings store stops as text labels, not App Intents entities: iOS failed to look entities back up, so the widgets always fell back to Central Library.

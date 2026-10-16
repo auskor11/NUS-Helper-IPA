@@ -19,6 +19,8 @@ struct BusStopConfig: WidgetConfigurationIntent {
 
     func chosenStop() async -> StopEntity {
         if let stop = await StopChoice.resolve(number: stopNumber) { return stop }
+        // Unset or "Chosen in the app": the stop picked with Show on widget.
+        if stop == nil || stop == StopChoice.appLabel { return StopChoice.pinned() ?? .fallback }
         return await StopChoice.resolve(stop) ?? .fallback
     }
 }
