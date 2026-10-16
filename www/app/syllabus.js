@@ -34,9 +34,14 @@ function lessonTopic(lesson,date){
   if(!w) return "";
   const t=String(lesson.lessonType||"").toLowerCase();
   const pick=t.startsWith("lec")||t.includes("lecture") ? w.lecture
-    : t.startsWith("tut")||t.startsWith("rec") ? w.tutorial
+    : t.startsWith("rec") ? w.recitation||w.tutorial
+    : t.startsWith("tut") ? w.tutorial
     : t.startsWith("lab") ? w.lab : "";
-  return pick||w.topic||"";
+  const text=pick||w.topic||"";
+  // "Wed: L9A Environment Model · Fri: L9B Lists and Loops II" -> the part for this day.
+  const day=new Date(date).toLocaleDateString("en-US",{weekday:"short"});
+  const part=text.split(" · ").find(p=>p.startsWith(`${day}:`));
+  return part ? part.slice(day.length+1).trim() : text;
 }
 
 // Every assessment, soonest first; ones without a date sort by week.
@@ -80,12 +85,13 @@ Use exactly this shape:
       "code": "CS2040S",
       "title": "Data Structures and Algorithms",
       "weeks": [
-        { "week": 1, "topic": "Introduction, sorting", "lecture": "Asymptotic analysis; sorting", "tutorial": "No tutorial", "lab": "Lab 0: setup", "readings": "CLRS ch. 2", "notes": "" }
+        { "week": 1, "topic": "Introduction, sorting", "lecture": "Asymptotic analysis; sorting", "tutorial": "No tutorial", "recitation": "R1: Sorting", "lab": "Lab 0: setup", "readings": "CLRS ch. 2", "notes": "" }
       ],
       "assessments": [
         { "title": "Midterm test", "type": "exam", "date": "2026-10-03", "time": "10:00", "endTime": "11:30", "week": 7, "weight": 20, "venue": "MPSH 1", "notes": "Closed book, one A4 cheat sheet" },
         { "title": "Problem sets (best 8 of 9)", "type": "assignment", "weight": 24, "notes": "3% each, due Sundays 23:59" },
-        { "title": "Tutorial participation", "type": "other", "weight": 5 }
+        { "title": "Tutorial participation", "type": "other", "weight": 5 },
+        { "title": "Reading Assessment 1", "type": "exam", "date": "2026-09-04", "weight": 8, "group": "Reading & programming assessments", "best": 3 }
       ]
     }
   ]
@@ -95,6 +101,8 @@ Rules:
 - "week" is the NUS teaching week number (1–13), or "recess", "reading" or "exam".
 ${calendar}- Dates are YYYY-MM-DD and times are 24-hour HH:MM (Singapore time). If a source gives only a week for an assessment, set "week" and leave out "date"; work out the date from the calendar above only when the source gives the day.
 - "weight" is the percentage of the final grade as a plain number (20, not "20%"). Include every graded component, including ones without a date such as participation or attendance, so the weights add up to 100. When a group of similar items has dates (e.g. Lab 1 to Lab 10), list each with its own weight; otherwise give the group as one entry with its total weight and explain the rule in "notes".
+- "Best N of M" rules: give each item its own weight, the same "group" name and "best": N (e.g. 4 quizzes at 8% each, best 3 count). Weights then add up to 100 once only the best N of each group are counted.
+- "lecture", "tutorial", "recitation" and "lab" match NUSMods lesson types. If a module names them differently (e.g. Studio is the tutorial, Reflection is the recitation), use the closest field and keep the module's own name in the text. If there are two lectures a week, put both in "lecture", e.g. "Wed: L9A Environment Model · Fri: L9B Lists and Loops II".
 - "type" is one of: ${ASSESSMENT_TYPES.join(", ")}.
 - Keep each text short (one line). Leave out any field the sources don't say; don't guess.
 - One entry per module code, with every week that has content.${codes?`\n- My modules this semester: ${codes}.`:""}`;
@@ -120,9 +128,9 @@ function parseSyllabus(text){
     if(!code) return null;
     const weeks=(m.weeks||[]).map(w=>({
       week:weekKey(w.week),
-      topic:str(w.topic), lecture:str(w.lecture), tutorial:str(w.tutorial), lab:str(w.lab),
+      topic:str(w.topic), lecture:str(w.lecture), tutorial:str(w.tutorial), recitation:str(w.recitation), lab:str(w.lab),
       readings:str(w.readings), notes:str(w.notes)
-    })).filter(w=>w.week!=null && (w.topic||w.lecture||w.tutorial||w.lab||w.readings||w.notes));
+    })).filter(w=>w.week!=null && (w.topic||w.lecture||w.tutorial||w.recitation||w.lab||w.readings||w.notes));
     const assessments=(m.assessments||[]).map(a=>({
       title:str(a.title||a.name),
       type:ASSESSMENT_TYPES.includes(str(a.type).toLowerCase())?str(a.type).toLowerCase():"other",
@@ -130,7 +138,9 @@ function parseSyllabus(text){
       time:/^\d{1,2}:\d{2}$/.test(str(a.time))?minutesToInput(timeToMinutes(str(a.time))):"",
       endTime:/^\d{1,2}:\d{2}$/.test(str(a.endTime))?minutesToInput(timeToMinutes(str(a.endTime))):"",
       week:typeof weekKey(a.week)==="number"?weekKey(a.week):null,
-      weight:weightValue(a.weight), venue:str(a.venue), notes:str(a.notes)
+      weight:weightValue(a.weight), venue:str(a.venue), notes:str(a.notes),
+      // "Best 3 of 4" style groups: items sharing a group, of which `best` count.
+      group:str(a.group), best:parseInt(a.best,10)>0?parseInt(a.best,10):null
     })).filter(a=>a.title);
     return {code,title:str(m.title||m.name),weeks,assessments};
   }).filter(Boolean);
@@ -264,7 +274,7 @@ function syllabusViewHTML(date){
     const w=(m.weeks||[]).find(x=>String(x.week)===String(key));
     const due=thisWeek.filter(a=>a.module===m.code);
     const line=(label,text)=>text?`<div class="syl-line"><span>${label}</span><p>${esc(text)}</p></div>`:"";
-    const body=w?[line("Topic",w.topic),line("Lecture",w.lecture),line("Tutorial",w.tutorial),line("Lab",w.lab),line("Readings",w.readings),line("Notes",w.notes)].join("")
+    const body=w?[line("Topic",w.topic),line("Lecture",w.lecture),line("Tutorial",w.tutorial),line("Recitation",w.recitation),line("Lab",w.lab),line("Readings",w.readings),line("Notes",w.notes)].join("")
       :`<p class="subtle syl-none">${aw&&aw.kind!=="teaching"?esc(aw.label):"Nothing listed this week."}</p>`;
     return `<div class="card syl-card">
       <div class="syl-head"><b>${esc(m.code)}</b><small>${esc(m.title||moduleName(m.code))}</small></div>
@@ -272,8 +282,10 @@ function syllabusViewHTML(date){
       ${due.length?`<h4 class="sub-head">Due this week</h4>${due.map(a=>assessmentRowHTML(a,{showModule:false})).join("")}`:""}
     </div>`;
   }).join("");
-  const now=new Date();
-  const upcoming=all.filter(a=>!a.when||a.when>=now), past=all.filter(a=>a.when&&a.when<now);
+  // Ongoing components (participation, XP…) have no date or week; they're
+  // listed under Grades instead.
+  const now=new Date(), scheduled=all.filter(a=>a.date||a.week);
+  const upcoming=scheduled.filter(a=>!a.when||a.when>=now), past=scheduled.filter(a=>a.when&&a.when<now);
   return `${toolbar}${cards}
     <h3 class="section-title">Assessments</h3>
     <div class="card flush assess-list">${upcoming.length?upcoming.map(a=>assessmentRowHTML(a)).join(""):`<div class="empty-inline">No upcoming assessments.</div>`}
@@ -294,10 +306,22 @@ function syllabusViewHTML(date){
 
 function gradeSummary(m){
   const comps=(m.assessments||[]).filter(a=>weightValue(a.weight)!=null);
-  const total=comps.reduce((n,a)=>n+weightValue(a.weight),0);
-  const graded=comps.filter(a=>a.score!=null);
-  const gradedWeight=graded.reduce((n,a)=>n+weightValue(a.weight),0);
-  const earned=graded.reduce((n,a)=>n+weightValue(a.weight)*a.score/100,0);
+  // Items in a "best N" group count only N times; ungrouped items are their own group.
+  const groups=new Map();
+  comps.forEach((a,i)=>{ const k=a.group&&a.best?`g:${a.group}`:`i:${i}`; if(!groups.has(k)) groups.set(k,[]); groups.get(k).push(a); });
+  let total=0, gradedWeight=0, earned=0;
+  for(const items of groups.values()){
+    const best=Math.min(items[0].best||items.length,items.length);
+    const weights=items.map(a=>weightValue(a.weight)).sort((x,y)=>y-x);
+    const counted=weights.slice(0,best).reduce((n,w)=>n+w,0);
+    const marks=items.filter(a=>a.score!=null).map(a=>({w:weightValue(a.weight),got:weightValue(a.weight)*a.score/100}))
+      .sort((x,y)=>y.got-x.got).slice(0,best);
+    total+=counted;
+    // Once N items are graded the group is settled; before that, the rest is still to come.
+    const g=marks.length>=best?counted:marks.reduce((n,x)=>n+x.w,0);
+    gradedWeight+=g;
+    earned+=marks.reduce((n,x)=>n+x.got,0);
+  }
   return {comps,total,gradedWeight,earned,remaining:Math.max(0,total-gradedWeight)};
 }
 
@@ -318,7 +342,7 @@ function gradeCardHTML(m){
     ${Math.abs(g.total-100)>0.5?`<div class="grade-warn">Weights add up to ${pctText(g.total)}, not 100%. Check the outline or add the missing component in a new file.</div>`:""}
     <div class="grade-rows">${(m.assessments||[]).map((a,i)=>weightValue(a.weight)==null?"":`
       <button class="grade-row" data-grade="${esc(m.code)}|${i}">
-        <span class="grade-title">${esc(a.title)}<small>${esc(weightLabel(a.weight))}</small></span>
+        <span class="grade-title">${esc(a.title)}<small>${esc(weightLabel(a.weight))}${!a.date&&!a.week?" · ongoing":""}${a.group&&a.best?` · best ${a.best} of ${(m.assessments||[]).filter(x=>x.group===a.group).length} count`:""}</small></span>
         <span class="grade-score ${a.score==null?"empty":""}">${a.score==null?"Add score":`${esc(a.scoreText||pctText(a.score))}<small>+${pctText(weightValue(a.weight)*a.score/100)}</small>`}</span>
       </button>`).join("")}</div>
   </div>`;
