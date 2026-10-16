@@ -56,7 +56,7 @@ Not bundled: `sw.js` (service workers don't run in iOS apps).
 
 ## Syllabus, weeks and bus types
 
-- **Syllabus** (Schedule → Syllabus): what each module covers each week, every assessment, and a grade breakdown (weights, your scores, earned so far, still to come). The file is made by Claude: tap **Make the file with Claude**, copy the prompt, give it to Claude with your modules' lesson plans, and import the `syllabus.json` it makes (or paste its contents). Dated assessments are added to Tasks. Code: `app/syllabus.js` in the web app.
+- **Courses** tab: This week / Assessments / Grades across modules; tap a module for its full Outline, Assessments and Grades (weights, your scores, earned so far, still to come). Import via the ⋯ button. Settings (formerly More) is the gear on Today. The file is made by Claude: tap **Make the file with Claude**, copy the prompt, give it to Claude with your modules' lesson plans, and import the `syllabus.json` it makes (or paste its contents). Dated assessments are added to Tasks. Code: `app/syllabus.js` in the web app.
 - **Teaching weeks**: classes follow their weeks (NUSMods' `weeks`, or Weekly / Odd / Even / Custom in Modules → Edit timings manually), and skip recess, reading and exam weeks. Semester start dates are in `SEMESTER_STARTS` in `shared.js`; add the next academic year there when NUS publishes it. Widgets get the next four weeks of dated classes.
 - **Bus type**: public bus arrivals show single deck / double deck / bendy and how full the bus is (LTA data via arrivelah). NUS shuttles don't report this.
 - **Map**: OpenFreeMap vector map ("liberty" style, inverted for dark mode). Change it in the map's layers menu.

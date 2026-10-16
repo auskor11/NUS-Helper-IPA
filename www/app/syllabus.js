@@ -1,7 +1,7 @@
 /* Syllabus: what each module covers week by week, and its assessments.
  * The file is made by Claude from the module's lesson plan (the prompt is in
- * syllabusPrompt) and imported here. Shown as the Schedule tab's Syllabus
- * view and as the topic line on lessons in the Day view. Assessments with a
+ * syllabusPrompt) and imported here. Shown in the Courses tab (app/courses.js)
+ * and as the topic line on lessons in the Day view. Assessments with a
  * date are also added to Tasks so they get reminders.
  */
 
@@ -200,7 +200,7 @@ function openSyllabusImporter(){
     openModal(`<div class="success-hero">${icon("M20 6 9 17l-5-5",36)}</div><h2>Syllabus imported</h2>
       <p class="subtle">${r.modules} module${r.modules===1?"":"s"} · ${r.weeks} weeks of topics · ${r.assessments} assessment${r.assessments===1?"":"s"}${r.tasks?` · ${r.tasks} added to Tasks`:""}</p>
       <button class="btn primary full" id="sylDone">See this week</button>`);
-    $("#sylDone").onclick=()=>{ closeModal(); go("schedule",{mode:"syllabus"}); };
+    $("#sylDone").onclick=()=>{ closeModal(); go("courses"); };
   };
 }
 
@@ -211,7 +211,7 @@ function openSyllabusHelp(){
       <li>Copy the prompt below</li>
       <li>In a new Claude chat, paste it and attach your modules' course materials with the + or paperclip button: outline PDFs, screenshots, slides or Word files, in any mix. Attach everything at once, or one module per chat</li>
       <li>Download the <b>syllabus.json</b> Claude makes. On iPhone, tap the file, then Share → Save to Files</li>
-      <li>Come back and tap <b>Import or update</b> → Choose file</li>
+      <li>Come back to <b>Courses</b>, tap the ⋯ button → <b>Import or update</b> → Choose file</li>
     </ol>
     <p class="small-help">One file can hold all your modules, or you can do one module at a time: importing only replaces the modules in the file, and keeps any scores you've entered. If Claude can't open a file (some .pptx), export it as PDF and attach that instead.</p>
     <button class="btn primary full" id="copyPrompt">${icon("M8 8h12v12H8zM4 16V4h12",18)}Copy prompt</button>
@@ -248,56 +248,23 @@ function assessmentRowHTML(a,{showModule=true}={}){
   </div>`;
 }
 
-function syllabusViewHTML(date){
-  const aw=academicWeek(date);
-  const mods=state.syllabus?.modules||[];
-  const start=startOfWeek(date), end=addDays(start,6);
-  const range=`${start.toLocaleDateString("en-SG",{day:"numeric",month:"short"})} – ${end.toLocaleDateString("en-SG",{day:"numeric",month:"short"})}`;
-  const toolbar=`<div class="toolbar">
-      <button class="icon-btn sm" id="prevWeek" aria-label="Previous week">${icon("M15 18l-6-6 6-6",18)}</button>
-      <b>${esc(aw?.label||"This week")}<small class="toolbar-sub">${esc(range)}</small></b>
-      <button class="icon-btn sm" id="nextWeek" aria-label="Next week">${icon("M9 18l6-6-6-6",18)}</button>
-    </div>`;
-  if(!mods.length){
-    return `${toolbar}<div class="empty-state">${icon("M4 19.5A2.5 2.5 0 0 1 6.5 17H20V3H6.5A2.5 2.5 0 0 0 4 5.5zM8 7h8M8 11h6",40)}
-      <h3>Add your syllabus</h3>
-      <p>See what each lecture and tutorial covers this week, and keep track of every assessment.</p>
-      <button class="btn primary" id="sylHelp">Make the file with Claude</button>
-      <button class="btn ghost" id="sylImportBtn">I have the file</button>
-    </div>`;
-  }
-  const weekEnd=addDays(start,7);
-  const all=allAssessments();
-  const thisWeek=all.filter(a=>a.when&&a.when>=start&&a.when<weekEnd);
-  const cards=mods.map(m=>{
-    const key=aw?(aw.week??aw.kind):null;
-    const w=(m.weeks||[]).find(x=>String(x.week)===String(key));
-    const due=thisWeek.filter(a=>a.module===m.code);
-    const line=(label,text)=>text?`<div class="syl-line"><span>${label}</span><p>${esc(text)}</p></div>`:"";
-    const body=w?[line("Topic",w.topic),line("Lecture",w.lecture),line("Tutorial",w.tutorial),line("Recitation",w.recitation),line("Lab",w.lab),line("Readings",w.readings),line("Notes",w.notes)].join("")
-      :`<p class="subtle syl-none">${aw&&aw.kind!=="teaching"?esc(aw.label):"Nothing listed this week."}</p>`;
-    return `<div class="card syl-card">
-      <div class="syl-head"><b>${esc(m.code)}</b><small>${esc(m.title||moduleName(m.code))}</small></div>
-      ${body}
-      ${due.length?`<h4 class="sub-head">Due this week</h4>${due.map(a=>assessmentRowHTML(a,{showModule:false})).join("")}`:""}
-    </div>`;
-  }).join("");
-  // Ongoing components (participation, XP…) have no date or week; they're
-  // listed under Grades instead.
-  const now=new Date(), scheduled=all.filter(a=>a.date||a.week);
-  const upcoming=scheduled.filter(a=>!a.when||a.when>=now), past=scheduled.filter(a=>a.when&&a.when<now);
-  return `${toolbar}${cards}
-    <h3 class="section-title">Assessments</h3>
-    <div class="card flush assess-list">${upcoming.length?upcoming.map(a=>assessmentRowHTML(a)).join(""):`<div class="empty-inline">No upcoming assessments.</div>`}
-      ${past.length?`<details class="assess-past"><summary>${past.length} past</summary>${past.reverse().map(a=>assessmentRowHTML(a)).join("")}</details>`:""}
-    </div>
-    <h3 class="section-title">Grades</h3>
-    ${mods.map(gradeCardHTML).join("")}
-    <div class="syl-actions">
-      <button class="btn secondary" id="sylImportBtn">Import or update</button>
-      <button class="btn ghost" id="sylHelp">Make the file with Claude</button>
-      <button class="btn ghost danger-text" id="sylClear">Remove syllabus</button>
-    </div>`;
+// The weeks of a semester in order, for module outlines.
+const OUTLINE_WEEKS=[1,2,3,4,5,6,"recess",7,8,9,10,11,12,13,"reading","exam"];
+
+// {label:"Week 3", range:"24 – 30 Aug", start} for a syllabus week key.
+function outlineWeekInfo(key){
+  const start=semesterStart();
+  const idx=typeof key==="number"?(key<=6?key-1:key):{recess:6,reading:14,exam:15}[key];
+  const label=typeof key==="number"?`Week ${key}`:{recess:"Recess week",reading:"Reading week",exam:"Exams"}[key];
+  if(!start||idx==null) return {label,range:"",start:null};
+  const from=addDays(start,idx*7), to=addDays(from,key==="exam"?13:6);
+  const f=d=>d.toLocaleDateString("en-SG",{day:"numeric",month:"short"});
+  return {label,range:`${f(from)} – ${f(to)}`,start:from};
+}
+
+function syllabusLinesHTML(w){
+  const line=(label,text)=>text?`<div class="syl-line"><span>${label}</span><p>${esc(text)}</p></div>`:"";
+  return [line("Lecture",w.lecture),line("Tutorial",w.tutorial),line("Recitation",w.recitation),line("Lab",w.lab),line("Readings",w.readings),line("Notes",w.notes)].join("");
 }
 
 /* ---------- Grades ---------- */
@@ -327,12 +294,12 @@ function gradeSummary(m){
 
 const pctText=n=>`${+n.toFixed(1)}%`;
 
-function gradeCardHTML(m){
+function gradeCardHTML(m,{title=m.code}={}){
   const g=gradeSummary(m);
   if(!g.comps.length) return `<div class="card grade-card"><div class="syl-head"><b>${esc(m.code)}</b></div><p class="subtle syl-none">No weightage in the file.</p></div>`;
   const scale=Math.max(100,g.total);
   return `<div class="card grade-card">
-    <div class="syl-head"><b>${esc(m.code)}</b><small>${g.gradedWeight?`${pctText(g.earned)} earned of ${pctText(g.gradedWeight)} graded · ${pctText(g.earned/g.gradedWeight*100)} average`:"No scores yet"}</small></div>
+    <div class="syl-head"><b>${esc(title)}</b><small>${g.gradedWeight?`${pctText(g.earned)} earned of ${pctText(g.gradedWeight)} graded · ${pctText(g.earned/g.gradedWeight*100)} average`:"No scores yet"}</small></div>
     <div class="grade-bar" title="Earned, lost and still to come">
       <span class="earned" style="width:${g.earned/scale*100}%"></span>
       <span class="lost" style="width:${(g.gradedWeight-g.earned)/scale*100}%"></span>
@@ -382,11 +349,12 @@ function openScoreSheet(code,i){
   $("#clearScore")?.addEventListener("click",()=>{ delete a.score; delete a.scoreText; closeModal(); save(); });
 }
 
-function bindSyllabusView(el){
+// Score rows and the import / help / remove buttons inside a view.
+function bindSyllabusActions(el){
   $$("[data-grade]",el).forEach(b=>b.onclick=()=>{ const [code,i]=b.dataset.grade.split("|"); openScoreSheet(code,+i); });
-  $("#sylHelp",el)?.addEventListener("click",openSyllabusHelp);
-  $("#sylImportBtn",el)?.addEventListener("click",openSyllabusImporter);
-  $("#sylClear",el)?.addEventListener("click",async()=>{
+  $$("[data-syl=help]",el).forEach(b=>b.onclick=openSyllabusHelp);
+  $$("[data-syl=import]",el).forEach(b=>b.onclick=openSyllabusImporter);
+  $$("[data-syl=clear]",el).forEach(b=>b.onclick=async()=>{
     if(!await confirmSheet("Remove the syllabus? Assessments it added to Tasks are removed too.",{confirm:"Remove"})) return;
     state.syllabus={modules:[]};
     state.tasks=state.tasks.filter(t=>t.source!=="syllabus");

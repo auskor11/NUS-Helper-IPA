@@ -112,7 +112,7 @@ function openScheduleItem(kind,id,date=null){
 
 views.schedule=(()=>{
   let el=null;
-  let mode=localStorage.getItem("nus_schedule_mode")||"day";
+  let mode=["day","week","month"].includes(localStorage.getItem("nus_schedule_mode"))?localStorage.getItem("nus_schedule_mode"):"day";
   let selected=new Date(); selected.setHours(12,0,0,0);
   let monthCursor=new Date(selected.getFullYear(),selected.getMonth(),1);
   const HOUR_START=8, HOUR_END=22, ROW=56;
@@ -211,9 +211,9 @@ views.schedule=(()=>{
         actions:sameDay(selected,new Date())&&mode!=="month"?"":`<button class="btn ghost sm" id="goToday">Today</button>`
       })}
       <div class="segmented">
-        ${[["day","Day"],["week","Week"],["month","Month"],["syllabus","Syllabus"]].map(([k,l])=>`<button class="${mode===k?"on":""}" data-mode="${k}">${l}</button>`).join("")}
+        ${[["day","Day"],["week","Week"],["month","Month"]].map(([k,l])=>`<button class="${mode===k?"on":""}" data-mode="${k}">${l}</button>`).join("")}
       </div>
-      ${mode==="day"?dayView():mode==="week"?weekView():mode==="month"?monthView():syllabusViewHTML(selected)}
+      ${mode==="day"?dayView():mode==="week"?weekView():monthView()}
       <button class="fab" id="addSchedule" aria-label="Add">${icon("M12 5v14M5 12h14",26)}</button>`;
 
     $$("[data-mode]",el).forEach(b=>b.onclick=()=>setMode(b.dataset.mode));
@@ -228,7 +228,6 @@ views.schedule=(()=>{
     });
     $$("[data-open]",el).forEach(b=>b.onclick=()=>openScheduleItem(b.dataset.open,b.dataset.id,b.dataset.day?new Date(`${b.dataset.day}T12:00:00`):selected));
     $("#addSchedule",el).onclick=()=>openAddChooser(isoDate(selected));
-    if(mode==="syllabus") bindSyllabusView(el);
 
     // Start the week grid at 8am, with today's column (or Monday) first.
     const wrap=$(".week-wrap",el);
@@ -244,6 +243,8 @@ views.schedule=(()=>{
     mount(c){ el=c; },
     show(params){
       if(params.date){ selected=new Date(`${params.date}T12:00:00`); mode="day"; }
+      // The syllabus moved to the Courses tab; old links still work.
+      if(params.mode==="syllabus"){ go("courses"); return; }
       if(params.mode) setMode(params.mode);
       render();
     },

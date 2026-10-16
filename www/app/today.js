@@ -66,7 +66,7 @@ views.today=(()=>{
     el.innerHTML=`
       ${pageHeader(greeting(),{
         eyebrow:`${now.toLocaleDateString("en-SG",{weekday:"long",day:"numeric",month:"long"})}${academicWeek(now)?` · ${academicWeek(now).label}`:""}`,
-        actions:`<button class="icon-btn" id="todayBell" aria-label="Reminders">${icon("M6 8a6 6 0 1 1 12 0c0 7 3 9 3 9H3s3-2 3-9M10.3 21a1.94 1.94 0 0 0 3.4 0")}${reminders?`<span class="dot">${reminders}</span>`:""}</button>`
+        actions:`<button class="icon-btn" data-go="more" aria-label="Settings">${icon(SETTINGS_ICON)}</button><button class="icon-btn" id="todayBell" aria-label="Reminders">${icon("M6 8a6 6 0 1 1 12 0c0 7 3 9 3 9H3s3-2 3-9M10.3 21a1.94 1.94 0 0 0 3.4 0")}${reminders?`<span class="dot">${reminders}</span>`:""}</button>`
       })}
       ${overdue.length?`<button class="banner warn" data-go="tasks">${icon("M12 9v4M12 17h.01M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z",18)}<span><b>${overdue.length} overdue task${overdue.length===1?"":"s"}</b> · ${esc(overdue[0].title)}${overdue.length>1?" and more":""}</span>${icon("M9 18l6-6-6-6",18)}</button>`:""}
       <div class="today-grid">

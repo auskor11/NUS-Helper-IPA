@@ -13,7 +13,7 @@ views.more=(()=>{
     const light=document.body.classList.contains("light");
     const notif=notificationStatus();
     el.innerHTML=`
-      ${pageHeader("More")}
+      ${pageHeader("Settings",{back:"today"})}
       <div class="card account-card">
         <div class="avatar">${esc((name||"?").trim().charAt(0).toUpperCase())}</div>
         <div><b>${esc(name)}</b><small>${esc(user?.email&&user.email!==name?user.email:"Synced across your devices")}</small></div>
@@ -43,7 +43,7 @@ views.more=(()=>{
     $("#signOut",el).onclick=async()=>{ if(await confirmSheet("Sign out of NUS Companion?",{confirm:"Sign out"})) signOutUser(); };
   }
 
-  return {title:"More", mount(c){ el=c; }, show(){ render(); }, refresh(){ render(); }};
+  return {title:"Settings", mount(c){ el=c; }, show(){ render(); }, refresh(){ render(); }};
 })();
 
 /* ---------- Activities ---------- */
