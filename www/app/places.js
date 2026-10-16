@@ -69,20 +69,38 @@ async function loadShuttleArrivals(code){
 // Singapore public bus arrivals from arrivelah (BusRouter SG).
 async function loadPublicArrivals(code){
   const data=await getJSON(`https://arrivelah2.busrouter.sg/?id=${encodeURIComponent(code)}`);
-  const mins=x=>{
+  // Each arrival also says what kind of bus it is (type: SD single deck,
+  // DD double deck, BD bendy) and how full it is (load: SEA seats available,
+  // SDA standing, LSD limited standing), from LTA DataMall.
+  const arrival=x=>{
     if(!x) return null;
-    const ms=Number(x.duration_ms);
-    if(Number.isFinite(ms)) return Math.max(0,Math.round(ms/60000));
-    const t=new Date(x.time||x.estimatedArrival||"").getTime();
-    return Number.isFinite(t) ? Math.max(0,Math.round((t-Date.now())/60000)) : null;
+    const ms=Number(x.duration_ms), t=new Date(x.time||x.estimatedArrival||"").getTime();
+    const m=Number.isFinite(ms) ? Math.max(0,Math.round(ms/60000))
+      : Number.isFinite(t) ? Math.max(0,Math.round((t-Date.now())/60000)) : null;
+    return m==null ? null : {m,type:x.type||"",load:x.load||""};
   };
-  return (data?.services||[]).map(s=>etaRow(s.no,[mins(s.next),mins(s.next2||s.subsequent),mins(s.next3)],"public")).sort(byNextArrival);
+  return (data?.services||[]).map(s=>etaRow(s.no,[arrival(s.next),arrival(s.next2||s.subsequent),arrival(s.next3)],"public")).sort(byNextArrival);
 }
 
-// {service, kind, times: up to 3 minutes-away values, next, then}
+// {service, kind, times: up to 3 minutes-away values, buses: [{type, load}]
+// for those times when known, next, then}. `list` holds minutes or
+// {m, type, load}.
 function etaRow(service,list,kind){
-  const times=[...new Set(list.filter(m=>m!=null))].sort((a,b)=>a-b).slice(0,3);
-  return {service,kind,times,next:times[0]??null,then:times[1]??null};
+  const seen=new Set();
+  const arrivals=list.map(x=>typeof x==="number"?{m:x}:x)
+    .filter(x=>x&&x.m!=null&&!seen.has(x.m)&&seen.add(x.m))
+    .sort((a,b)=>a.m-b.m).slice(0,3);
+  const times=arrivals.map(x=>x.m);
+  return {service,kind,times,buses:arrivals.map(({type="",load=""})=>({type,load})),next:times[0]??null,then:times[1]??null};
+}
+
+const BUS_TYPES={DD:"Double deck",SD:"Single deck",BD:"Bendy"};
+const BUS_LOADS={SEA:"Seats available",SDA:"Standing",LSD:"Packed"};
+
+// "Double deck · Seats available" for a public bus, with a crowd dot.
+function busInfoHTML(bus){
+  if(!bus||!(BUS_TYPES[bus.type]||BUS_LOADS[bus.load])) return "";
+  return `<span class="bus-info">${BUS_LOADS[bus.load]?`<i class="load load-${esc(bus.load)}" title="${esc(BUS_LOADS[bus.load])}"></i>`:""}${esc([BUS_TYPES[bus.type],BUS_LOADS[bus.load]].filter(Boolean).join(" · "))}</span>`;
 }
 function byNextArrival(a,b){ return (a.next??999)-(b.next??999); }
 
@@ -91,7 +109,7 @@ function etaRowsHTML(rows){
     const later=r.times.slice(1).map(m=>m<=0?"now":m);
     return `<div class="eta-row">
       <span class="route-badge ${r.kind==="nus"?`nus r-${esc(String(r.service).replace(/[^A-Za-z0-9]/g,""))}`:"public"}">${esc(r.service)}</span>
-      <span class="eta-next">${r.next==null?"–":r.next<=0?"Arriving":`<b>${r.next}</b> min`}</span>
+      <span class="eta-next">${r.next==null?"–":r.next<=0?"Arriving":`<b>${r.next}</b> min`}${busInfoHTML(r.buses?.[0])}</span>
       <span class="eta-then">${later.length?`then ${later.join(", ")}${typeof later.at(-1)==="number"?" min":""}`:""}</span>
     </div>`;
   }).join("")}</div>`;

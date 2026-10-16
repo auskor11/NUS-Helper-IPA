@@ -120,6 +120,11 @@ struct Arrival: Identifiable {
     let isShuttle: Bool
     /// Arrival times, soonest first (up to three).
     let times: [Date]
+    /// The next public bus's type from LTA: SD single deck, DD double deck, BD bendy.
+    var deck: String? = nil
+
+    /// Shown only when it isn't the usual single-decker.
+    var deckLabel: String? { ["DD": "Double", "BD": "Bendy"][deck ?? ""] }
 }
 
 enum Arrivals {
@@ -144,7 +149,7 @@ enum Arrivals {
         return services.compactMap { s in
             guard let no = s["no"] as? String else { return nil }
             let mins = ["next", "next2", "next3"].compactMap { ((s[$0] as? [String: Any])?["duration_ms"] as? Double).map { $0 / 60_000 } }
-            return Arrival(service: no, isShuttle: false, times: dates(mins))
+            return Arrival(service: no, isShuttle: false, times: dates(mins), deck: (s["next"] as? [String: Any])?["type"] as? String)
         }
     }
 

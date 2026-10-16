@@ -21,6 +21,7 @@ const state = {
   activities: [],
   tasks: [],
   places: [],   // saved map places, e.g. {id, name:"Home", icon:"home", lat, lng, address}
+  syllabus: {modules:[]},   // weekly topics and assessments per module (app/syllabus.js)
   semester: {academicYear:ACADEMIC_YEAR, semester:SEMESTER}
 };
 
@@ -80,6 +81,7 @@ function resetState(){
   state.activities=[];
   state.tasks=[];
   state.places=[];
+  state.syllabus={modules:[]};
   state.semester={academicYear:ACADEMIC_YEAR, semester:SEMESTER};
   lastRemoteCloudChangeAt=0;
 }
@@ -108,6 +110,7 @@ function startCloudSync(){
       if(Array.isArray(remote.activities)) state.activities=remote.activities;
       if(Array.isArray(remote.tasks)) state.tasks=remote.tasks;
       if(Array.isArray(remote.places)) state.places=remote.places;
+      if(remote.syllabus && Array.isArray(remote.syllabus.modules)) state.syllabus=remote.syllabus;
       if(remote.semester) state.semester=remote.semester;
     }
 
@@ -247,6 +250,75 @@ function durationLabel(mins){
 
 function moduleName(code){ return state.modules.find(m=>m.code===code)?.name || code || "No module"; }
 
+/* ---------- Academic weeks ---------- */
+
+// Monday of Week 1 for each semester, from NUSMods' academic calendar
+// (packages/nusmods-academic-calendar). Weeks 1-6, recess, weeks 7-13,
+// reading week, then two weeks of exams.
+const SEMESTER_STARTS={
+  "2025-2026":{1:"2025-08-11",2:"2026-01-12"},
+  "2026-2027":{1:"2026-08-10",2:"2027-01-11"},
+  "2027-2028":{1:"2027-08-09",2:"2028-01-10"}
+};
+const TEACHING_WEEKS=[1,2,3,4,5,6,7,8,9,10,11,12,13];
+
+function semesterStart(){
+  const iso=SEMESTER_STARTS[state.semester?.academicYear]?.[String(state.semester?.semester)];
+  return iso ? new Date(`${iso}T00:00:00`) : null;
+}
+
+// {kind:"teaching"|"recess"|"reading"|"exam"|"orientation"|"break", week, label}
+// for a date, or null when the semester's dates aren't known.
+function academicWeek(date){
+  const start=semesterStart();
+  if(!start) return null;
+  const d=new Date(date); d.setHours(0,0,0,0);
+  const i=Math.floor(Math.round((d-start)/86400000)/7);
+  if(i>=0&&i<=5) return {kind:"teaching",week:i+1,label:`Week ${i+1}`};
+  if(i===6) return {kind:"recess",week:null,label:"Recess week"};
+  if(i>=7&&i<=13) return {kind:"teaching",week:i,label:`Week ${i}`};
+  if(i===14) return {kind:"reading",week:null,label:"Reading week"};
+  if(i===15||i===16) return {kind:"exam",week:null,label:`Exam week ${i-14}`};
+  if(i===-1) return {kind:"orientation",week:null,label:"Orientation week"};
+  return {kind:"break",week:null,label:"Vacation"};
+}
+
+// A lesson's `weeks` is a list of teaching weeks (as NUSMods gives it, e.g.
+// [3,5,7,9,11] for alternate-week tutorials) or missing for every week.
+// NUSMods sometimes gives a date range instead: {start, end, weekInterval}.
+function lessonOccursOnDate(l,date){
+  if(l.day!==dayName(date)) return false;
+  const w=l.weeks;
+  if(w && !Array.isArray(w) && typeof w==="object" && w.start){
+    const d=isoDate(date);
+    if(d<w.start || (w.end && d>w.end)) return false;
+    const n=Math.round((new Date(`${d}T00:00:00`)-new Date(`${w.start}T00:00:00`))/604800000);
+    if(Array.isArray(w.weeks)) return w.weeks.includes(n+1);
+    return n%(w.weekInterval||1)===0;
+  }
+  const aw=academicWeek(date);
+  if(!aw) return true; // unknown calendar: every week
+  if(aw.kind!=="teaching") return false;
+  return !Array.isArray(w) || !w.length || w.includes(aw.week);
+}
+
+// "Every week", "Odd weeks", "Even weeks" or "Weeks 3, 5, 7–9".
+function weeksLabel(weeks){
+  if(weeks && !Array.isArray(weeks)) return weeks.weekInterval===2 ? "Every 2 weeks" : "Selected dates";
+  const w=[...new Set((weeks||[]).map(Number))].sort((a,b)=>a-b);
+  if(!w.length || TEACHING_WEEKS.every(x=>w.includes(x))) return "Every week";
+  const same=list=>list.length===w.length && list.every((x,i)=>x===w[i]);
+  if(same(TEACHING_WEEKS.filter(x=>x%2))) return "Odd weeks";
+  if(same(TEACHING_WEEKS.filter(x=>x%2===0))) return "Even weeks";
+  const parts=[];
+  for(let i=0;i<w.length;i++){
+    let j=i; while(j+1<w.length && w[j+1]===w[j]+1) j++;
+    parts.push(j-i>=2?`${w[i]}–${w[j]}`:w.slice(i,j+1).join(", "));
+    i=j;
+  }
+  return `Week${w.length===1?"":"s"} ${parts.join(", ")}`;
+}
+
 /* ---------- Schedule queries ---------- */
 
 function activityOccursOnDate(a,date){
@@ -262,8 +334,7 @@ function isOverdue(t){ return !t.done && taskDateTime(t)<new Date(); }
 
 // Everything happening on a date, as uniform items sorted by start time.
 function itemsOnDate(date){
-  const day=dayName(date);
-  const lessons=state.lessons.filter(l=>l.day===day).map(l=>({
+  const lessons=state.lessons.filter(l=>lessonOccursOnDate(l,date)).map(l=>({
     kind:"lesson", id:l.id, ref:l,
     title:l.module, subtitle:`${l.lessonType||"Class"}${l.classNo&&l.classNo!=="TBC"?` ${l.classNo}`:""}`,
     venue:l.venue, start:timeToMinutes(l.startTime), end:timeToMinutes(l.endTime)

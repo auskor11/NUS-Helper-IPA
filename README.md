@@ -54,6 +54,13 @@ Free Apple ID signing expires after **7 days**. Rebuild and reinstall to renew i
 
 Not bundled: `sw.js` (service workers don't run in iOS apps).
 
+## Syllabus, weeks and bus types
+
+- **Syllabus** (Schedule → Syllabus): what each module covers each week, and every assessment. The file is made by Claude: tap **Make the file with Claude**, copy the prompt, give it to Claude with your modules' lesson plans, and import the `syllabus.json` it makes (or paste its contents). Dated assessments are added to Tasks. Code: `app/syllabus.js` in the web app.
+- **Teaching weeks**: classes follow their weeks (NUSMods' `weeks`, or Weekly / Odd / Even / Custom in Modules → Edit timings manually), and skip recess, reading and exam weeks. Semester start dates are in `SEMESTER_STARTS` in `shared.js`; add the next academic year there when NUS publishes it. Widgets get the next four weeks of dated classes.
+- **Bus type**: public bus arrivals show single deck / double deck / bendy and how full the bus is (LTA data via arrivelah). NUS shuttles don't report this.
+- **Map**: OpenFreeMap vector map ("liberty" style, inverted for dark mode). Change it in the map's layers menu.
+
 ## Dynamic Island trips
 
 **Start trip** in a route's details starts a Live Activity. It shows in the Dynamic Island and on the lock screen. The phone tracks the trip with background location until it ends.
@@ -97,3 +104,4 @@ The app writes the schedule, NUS stops and shuttle routes to the `group.auskor.N
 - `backup/2026-10-15-before-in-app-navigation`: the app before Citymapper was replaced with in-app directions.
 - `backup/2026-10-15-widgets-and-map-search` (tag `v1.0-2026-10-15`): widgets and the OpenStreetMap search.
 - `backup/2026-10-16-before-altstore` (tag `v1.1-2026-10-16`): Apple Maps search, before the AltStore changes.
+- `backup/2026-10-16-before-syllabus` (tag `v1.2-2026-10-16`): before the new map, bus types, teaching weeks and syllabus.

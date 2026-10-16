@@ -126,10 +126,17 @@
     if(!WidgetBridge || !window.nusFirebase?.user) return;
     const hhmm=v=>minutesToInput(timeToMinutes(v));
     const items=[];
+    // Lessons go in as dated classes for the next four weeks, so the widgets
+    // follow odd/even-week classes, recess and exam weeks (lessonOccursOnDate).
+    const today=new Date(); today.setHours(12,0,0,0);
     for(const l of state.lessons){
       const c=l.venueLat!=null?{lat:l.venueLat,lng:l.venueLng}:await coordsFor(l.venue);
-      items.push({kind:"lesson",title:l.module,subtitle:`${l.lessonType||"Class"}${l.classNo&&l.classNo!=="TBC"?` ${l.classNo}`:""}`,
-        day:l.day,date:null,start:hhmm(l.startTime),end:hhmm(l.endTime),venue:l.venue||"",lat:c?.lat??null,lng:c?.lng??null});
+      for(let i=0;i<28;i++){
+        const date=addDays(today,i);
+        if(!lessonOccursOnDate(l,date)) continue;
+        items.push({kind:"lesson",title:l.module,subtitle:`${l.lessonType||"Class"}${l.classNo&&l.classNo!=="TBC"?` ${l.classNo}`:""}`,
+          day:null,date:isoDate(date),start:hhmm(l.startTime),end:hhmm(l.endTime),venue:l.venue||"",lat:c?.lat??null,lng:c?.lng??null});
+      }
     }
     for(const a of state.activities){
       const c=a.venueLat!=null?{lat:a.venueLat,lng:a.venueLng}:await coordsFor(a.venue);

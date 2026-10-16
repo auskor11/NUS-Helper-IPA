@@ -5,14 +5,15 @@
 
 /* ---------- Detail sheets ---------- */
 
-function openLessonSheet(lesson){
+function openLessonSheet(lesson,date=null){
   const mod=state.modules.find(m=>m.code===lesson.module);
   openModal(`<p class="kicker">${esc(lesson.lessonType||"Class")}${lesson.classNo&&lesson.classNo!=="TBC"?` · Group ${esc(lesson.classNo)}`:""}</p>
     <h2>${esc(lesson.module)}</h2>
     <p class="subtle">${esc(mod?.name||"")}</p>
     <div class="detail-list">
-      <div>${icon("M7 3v3M17 3v3M4 8h16M5 5h14a1 1 0 0 1 1 1v13a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1z",18)}<span>Every ${esc(lesson.day)}</span></div>
+      <div>${icon("M7 3v3M17 3v3M4 8h16M5 5h14a1 1 0 0 1 1 1v13a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1z",18)}<span>${esc(lesson.day)}s · ${esc(weeksLabel(lesson.weeks))}</span></div>
       <div>${icon("M12 7v5l3 2M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18z",18)}<span>${inputTimeToLabel(lesson.startTime)} – ${inputTimeToLabel(lesson.endTime)}</span></div>
+      ${date&&lessonTopic(lesson,date)?`<div>${icon("M4 19.5A2.5 2.5 0 0 1 6.5 17H20V3H6.5A2.5 2.5 0 0 0 4 5.5z",18)}<span>${esc(academicWeek(date)?.label||"")}: ${esc(lessonTopic(lesson,date))}</span></div>`:""}
     </div>
     <div class="sheet-actions">
       ${lesson.venue?`<button class="btn primary" data-go="map" data-params='${esc(JSON.stringify({venue:lesson.venue}))}'>Show ${esc(lesson.venue)} on map</button>`:""}
@@ -101,8 +102,8 @@ function openAddChooser(date=""){
   $("#chooseActivity").onclick=()=>openActivityForm(null,{date});
 }
 
-function openScheduleItem(kind,id){
-  if(kind==="lesson"){ const l=state.lessons.find(x=>x.id===id); if(l) openLessonSheet(l); }
+function openScheduleItem(kind,id,date=null){
+  if(kind==="lesson"){ const l=state.lessons.find(x=>x.id===id); if(l) openLessonSheet(l,date); }
   if(kind==="activity"){ const a=state.activities.find(x=>x.id===id); if(a) openActivitySheet(a); }
   if(kind==="task"){ const t=state.tasks.find(x=>x.id===id); if(t) openTaskForm(t); }
 }
@@ -146,6 +147,7 @@ views.schedule=(()=>{
           <div class="tl-time">${minutesLabel(x.start)}${x.kind!=="task"?`<small>${minutesLabel(x.end)}</small>`:""}</div>
           <div class="tl-bar"></div>
           <div class="tl-main"><b>${x.kind==="task"&&x.done?"✓ ":""}${esc(x.title)}</b><small>${esc(x.kind==="lesson"?`${x.subtitle} · ${moduleName(x.title)}`:x.subtitle)}</small>
+            ${x.kind==="lesson"&&lessonTopic(x.ref,selected)?`<span class="tl-topic">${icon("M4 19.5A2.5 2.5 0 0 1 6.5 17H20V3H6.5A2.5 2.5 0 0 0 4 5.5z",12)}${esc(lessonTopic(x.ref,selected))}</span>`:""}
             ${x.venue?`<span class="tl-venue">${icon("M12 21s-7-6.2-7-11.5a7 7 0 0 1 14 0C19 14.8 12 21 12 21z",12)}${esc(x.venue)}</span>`:""}</div>
           ${live?`<span class="pill live">Now</span>`:""}
         </button>`;
@@ -170,7 +172,7 @@ views.schedule=(()=>{
           ${itemsOnDate(d).map(x=>{
             const s=Math.max(HOUR_START*60,x.start), e=Math.min(HOUR_END*60,x.kind==="task"?x.start+30:x.end);
             if(e<=s) return "";
-            return `<button class="week-ev kind-${x.kind}" style="top:${(s-HOUR_START*60)/60*ROW}px;height:${Math.max(24,(e-s)/60*ROW-2)}px" data-open="${x.kind}" data-id="${esc(x.id)}"><b>${esc(x.title)}</b><small>${esc(x.venue||x.subtitle||"")}</small></button>`;
+            return `<button class="week-ev kind-${x.kind}" style="top:${(s-HOUR_START*60)/60*ROW}px;height:${Math.max(24,(e-s)/60*ROW-2)}px" data-open="${x.kind}" data-id="${esc(x.id)}" data-day="${isoDate(d)}"><b>${esc(x.title)}</b><small>${esc(x.venue||x.subtitle||"")}</small></button>`;
           }).join("")}
           ${sameDay(d,now)&&nowMin>=HOUR_START*60&&nowMin<=HOUR_END*60?`<div class="now-line" style="top:${(nowMin-HOUR_START*60)/60*ROW}px"></div>`:""}
         </div>`).join("")}
@@ -192,7 +194,7 @@ views.schedule=(()=>{
         ${cells.map(d=>{
           const tasks=state.tasks.filter(t=>t.dueDate===isoDate(d)&&!t.done).length;
           const acts=state.activities.filter(a=>activityOccursOnDate(a,d)).length;
-          const lessons=state.lessons.some(l=>l.day===dayName(d));
+          const lessons=state.lessons.some(l=>lessonOccursOnDate(l,d));
           return `<button class="month-cell ${d.getMonth()===m?"":"out"} ${sameDay(d,now)?"today":""}" data-date="${isoDate(d)}">
             <b>${d.getDate()}</b>
             <span class="dots">${lessons?`<i class="d-lesson"></i>`:""}${acts?`<i class="d-activity"></i>`:""}${tasks?`<i class="d-task"></i>`:""}</span>
@@ -205,13 +207,13 @@ views.schedule=(()=>{
   function render(){
     el.innerHTML=`
       ${pageHeader("Schedule",{
-        eyebrow:`AY${esc(state.semester.academicYear)} · Sem ${esc(state.semester.semester)}`,
+        eyebrow:`AY${esc(state.semester.academicYear)} · Sem ${esc(state.semester.semester)}${academicWeek(selected)?` · ${esc(academicWeek(selected).label)}`:""}`,
         actions:sameDay(selected,new Date())&&mode!=="month"?"":`<button class="btn ghost sm" id="goToday">Today</button>`
       })}
       <div class="segmented">
-        ${[["day","Day"],["week","Week"],["month","Month"]].map(([k,l])=>`<button class="${mode===k?"on":""}" data-mode="${k}">${l}</button>`).join("")}
+        ${[["day","Day"],["week","Week"],["month","Month"],["syllabus","Syllabus"]].map(([k,l])=>`<button class="${mode===k?"on":""}" data-mode="${k}">${l}</button>`).join("")}
       </div>
-      ${mode==="day"?dayView():mode==="week"?weekView():monthView()}
+      ${mode==="day"?dayView():mode==="week"?weekView():mode==="month"?monthView():syllabusViewHTML(selected)}
       <button class="fab" id="addSchedule" aria-label="Add">${icon("M12 5v14M5 12h14",26)}</button>`;
 
     $$("[data-mode]",el).forEach(b=>b.onclick=()=>setMode(b.dataset.mode));
@@ -224,8 +226,9 @@ views.schedule=(()=>{
       selected=new Date(`${b.dataset.date}T12:00:00`);
       if(mode!=="day") setMode("day"); else render();
     });
-    $$("[data-open]",el).forEach(b=>b.onclick=()=>openScheduleItem(b.dataset.open,b.dataset.id));
+    $$("[data-open]",el).forEach(b=>b.onclick=()=>openScheduleItem(b.dataset.open,b.dataset.id,b.dataset.day?new Date(`${b.dataset.day}T12:00:00`):selected));
     $("#addSchedule",el).onclick=()=>openAddChooser(isoDate(selected));
+    if(mode==="syllabus") bindSyllabusView(el);
 
     // Start the week grid at 8am, with today's column (or Monday) first.
     const wrap=$(".week-wrap",el);
@@ -241,6 +244,7 @@ views.schedule=(()=>{
     mount(c){ el=c; },
     show(params){
       if(params.date){ selected=new Date(`${params.date}T12:00:00`); mode="day"; }
+      if(params.mode) setMode(params.mode);
       render();
     },
     refresh(){ render(); }

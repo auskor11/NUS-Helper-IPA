@@ -51,7 +51,8 @@ struct BusStopProvider: AppIntentTimelineProvider {
             let at = now.addingTimeInterval(Double(i) * 60)
             let upcoming = arrivals.compactMap { a -> Arrival? in
                 let times = a.times.filter { $0 > at.addingTimeInterval(-30) }
-                return times.isEmpty ? nil : Arrival(service: a.service, isShuttle: a.isShuttle, times: times)
+                return times.isEmpty ? nil : Arrival(service: a.service, isShuttle: a.isShuttle, times: times,
+                                                     deck: times.count == a.times.count ? a.deck : nil)
             }.sorted { $0.times[0] < $1.times[0] }
             return BusStopEntry(date: at, stop: stop, arrivals: upcoming, fetchedAt: now)
         }
@@ -112,6 +113,11 @@ struct BusStopView: View {
                         ServiceBadge(service: a.service, isShuttle: a.isShuttle)
                         Text(minutesText(a.times[0], from: entry.date) + (minutesText(a.times[0], from: entry.date) == "Arr" ? "" : " min"))
                             .font(.system(size: 13, weight: .semibold)).lineLimit(1)
+                        if let deck = a.deckLabel {
+                            Text(deck).font(.system(size: 9, weight: .semibold)).foregroundStyle(.white.opacity(0.7))
+                                .padding(.horizontal, 4).padding(.vertical, 1)
+                                .background(Color.white.opacity(0.12), in: RoundedRectangle(cornerRadius: 4))
+                        }
                         Spacer(minLength: 2)
                         if family != .systemSmall, a.times.count > 1 {
                             Text("then \(a.times.dropFirst().map { minutesText($0, from: entry.date) }.joined(separator: ", "))")

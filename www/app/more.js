@@ -108,7 +108,7 @@ views["more/modules"]=(()=>{
     openModal(`<p class="kicker">MODULE</p><h2>${esc(mod.code)}</h2><p class="subtle">${esc(mod.name)}</p>
       <div class="list lesson-list">${lessons.length?lessons.map(l=>`
         <div class="list-row">
-          <div><b>${esc(l.lessonType||"Class")} ${esc(l.classNo&&l.classNo!=="TBC"?l.classNo:"")}</b><small>${esc(l.day)} · ${inputTimeToLabel(l.startTime)} – ${inputTimeToLabel(l.endTime)}</small></div>
+          <div><b>${esc(l.lessonType||"Class")} ${esc(l.classNo&&l.classNo!=="TBC"?l.classNo:"")}</b><small>${esc(l.day)} · ${inputTimeToLabel(l.startTime)} – ${inputTimeToLabel(l.endTime)} · ${esc(weeksLabel(l.weeks))}</small></div>
           ${venueLink(l.venue)}
         </div>`).join(""):`<div class="empty-inline">No classes yet.</div>`}</div>
       <div class="sheet-actions">
@@ -298,6 +298,50 @@ views["more/modules"]=(()=>{
 
   /* ----- Manual lesson editor ----- */
 
+  // Which teaching weeks a class runs: every week, odd, even or picked weeks.
+  // Saved as the lesson's `weeks` list (missing = every week), as NUSMods does.
+  const ODD=TEACHING_WEEKS.filter(w=>w%2), EVEN=TEACHING_WEEKS.filter(w=>w%2===0);
+
+  function weeksMode(weeks){
+    if(weeks && !Array.isArray(weeks)) return "dates";
+    const label=weeksLabel(weeks);
+    return {"Every week":"every","Odd weeks":"odd","Even weeks":"even"}[label]||"custom";
+  }
+
+  function weeksPickerHTML(weeks){
+    const mode=weeksMode(weeks);
+    if(mode==="dates") return `<div class="weeks-picker" data-mode="dates"><small class="subtle">${esc(weeksLabel(weeks))} (from NUSMods)</small></div>`;
+    const on=new Set(Array.isArray(weeks)&&weeks.length?weeks:TEACHING_WEEKS);
+    return `<div class="weeks-picker" data-mode="${mode}">
+      <div class="seg-mini">${[["every","Weekly"],["odd","Odd"],["even","Even"],["custom","Custom"]].map(([k,l])=>`<button type="button" class="${mode===k?"on":""}" data-wmode="${k}">${l}</button>`).join("")}</div>
+      <div class="week-chips" ${mode==="custom"?"":"hidden"}>${TEACHING_WEEKS.map(w=>`<button type="button" class="${on.has(w)?"on":""}" data-week="${w}">${w}</button>`).join("")}</div>
+    </div>`;
+  }
+
+  function wireWeeksPicker(box){
+    if(!box || box.dataset.mode==="dates") return;
+    $$("[data-wmode]",box).forEach(b=>b.onclick=()=>{
+      box.dataset.mode=b.dataset.wmode;
+      $$("[data-wmode]",box).forEach(o=>o.classList.toggle("on",o===b));
+      const chips=$(".week-chips",box);
+      chips.hidden=b.dataset.wmode!=="custom";
+      const preset={every:TEACHING_WEEKS,odd:ODD,even:EVEN}[b.dataset.wmode];
+      if(preset) $$("[data-week]",chips).forEach(c=>c.classList.toggle("on",preset.includes(+c.dataset.week)));
+    });
+    $$("[data-week]",box).forEach(c=>c.onclick=()=>c.classList.toggle("on"));
+  }
+
+  // undefined = every week, null = leave as is, else the list of weeks.
+  function readWeeksPicker(box){
+    if(!box || box.dataset.mode==="dates") return null;
+    const mode=box.dataset.mode;
+    if(mode==="every") return undefined;
+    if(mode==="odd") return ODD;
+    if(mode==="even") return EVEN;
+    const picked=$$("[data-week].on",box).map(c=>+c.dataset.week);
+    return picked.length===TEACHING_WEEKS.length||!picked.length ? undefined : picked;
+  }
+
   function openLessonEditor(code){
     const mod=state.modules.find(m=>m.code===code);
     const draft=state.lessons.filter(l=>l.module===code).map(l=>({...l}));
@@ -318,15 +362,19 @@ views["more/modules"]=(()=>{
             <input class="input" type="time" data-f="endTime" value="${esc(minutesToInput(timeToMinutes(l.endTime)))}">
           </div>
           <div class="venue-slot"></div>
+          ${weeksPickerHTML(l.weeks)}
           <button type="button" class="link danger-text" data-remove="${i}">Remove</button>
         </div>`).join("")||`<div class="empty-inline">No classes. Add one below.</div>`;
       $$(".lesson-edit").forEach((row,i)=>pickers[i]=venuePicker($(".venue-slot",row),{value:draft[i].venue||"",lat:draft[i].venueLat,lng:draft[i].venueLng,placeholder:"Venue"}));
       $$("[data-remove]").forEach(b=>b.onclick=()=>{ collect(); draft.splice(+b.dataset.remove,1); draw(); });
+      $$(".lesson-edit").forEach(row=>wireWeeksPicker($(".weeks-picker",row)));
     };
     const collect=()=>{
       $$(".lesson-edit").forEach((row,i)=>{
         $$("[data-f]",row).forEach(f=>draft[i][f.dataset.f]=f.value);
         Object.assign(draft[i],pickers[i].get());
+        const weeks=readWeeksPicker($(".weeks-picker",row));
+        if(weeks===undefined) delete draft[i].weeks; else if(weeks) draft[i].weeks=weeks;
       });
     };
 

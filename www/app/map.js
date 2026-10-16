@@ -7,7 +7,7 @@ views.map=(()=>{
   let el=null, map=null, ready=false;
   let nusMarkers=new Map(), nusLayer=null, publicLayer=null, savedLayer=null, pinMarker=null, meMarker=null, watchId=null;
   let selected=null, refreshTimer=null, searchTimer=null, pendingParams=null, routeLayer=null;
-  let resultsLayer=null, lastSearch=null;
+  let resultsLayer=null, lastSearch=null, baseLayer=null, baseStyle=null;
 
   // Dynamic Island / lock screen trip tracking (iOS app only).
   // Native plugin from ios/App/App/Trip (NUS Helper IPA); absent on the web.
@@ -23,11 +23,8 @@ views.map=(()=>{
   const meIcon=()=>L.divIcon({className:"",html:`<div class="mk-me"><span></span></div>`,iconSize:[22,22],iconAnchor:[11,11]});
 
   function initMap(){
-    map=L.map($("#mapCanvas",el),{zoomControl:false,attributionControl:true}).setView([NUS_CENTER.lat,NUS_CENTER.lng],16);
-    L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png",{
-      maxZoom:19,
-      attribution:'© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
-    }).addTo(map);
+    map=L.map($("#mapCanvas",el),{zoomControl:false,attributionControl:true,maxZoom:19}).setView([NUS_CENTER.lat,NUS_CENTER.lng],16);
+    applyBaseStyle();
     publicLayer=L.layerGroup();
     nusLayer=L.layerGroup();
     savedLayer=L.layerGroup().addTo(map);
@@ -69,6 +66,47 @@ views.map=(()=>{
     ready=true;
   }
 
+  /* ---------- Base map ---------- */
+  // Vector maps from OpenFreeMap's "liberty" style (no key needed). Dark mode
+  // is the same map inverted with hues kept (styles.css .map-dark), which keeps
+  // far more detail than OpenFreeMap's own dark styles. Falls back to plain
+  // OpenStreetMap tiles where WebGL isn't available.
+
+  const MAP_STYLES={auto:"Match app theme",liberty:"Light",dark:"Dark",classic:"Classic"};
+
+  function mapStylePref(){ try{ return localStorage.getItem("nus_map_style")||"auto"; }catch{ return "auto"; } }
+
+  function applyBaseStyle(){
+    if(!map) return;
+    const pref=mapStylePref();
+    let style=pref==="auto" ? (document.body.classList.contains("light")?"liberty":"dark") : pref;
+    if(style!=="classic" && !(L.maplibreGL && window.maplibregl?.supported?.()!==false)) style="classic";
+    if(style===baseStyle) return;
+    if(baseLayer) map.removeLayer(baseLayer);
+    baseStyle=style;
+    if(style==="classic"){
+      baseLayer=L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png",{
+        maxZoom:19,
+        attribution:'© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+      }).addTo(map);
+    }else{
+      baseLayer=L.maplibreGL({
+        style:"https://tiles.openfreemap.org/styles/liberty",
+        attribution:'<a href="https://openfreemap.org">OpenFreeMap</a> © <a href="https://www.openmaptiles.org/">OpenMapTiles</a> © <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+      }).addTo(map);
+      baseLayer.getContainer?.()?.classList.toggle("map-dark",style==="dark");
+      // The app draws its own bus stops; keep the map's MRT and airport icons only.
+      const gl=baseLayer.getMaplibreMap();
+      gl.on("style.load",()=>{
+        for(const l of gl.getStyle().layers.filter(l=>l.id.startsWith("poi"))){
+          const f=gl.getFilter(l.id);
+          gl.setFilter(l.id,f?["all",f,["!=",["get","class"],"bus"]]:["!=",["get","class"],"bus"]);
+        }
+      });
+    }
+    baseLayer.bringToBack?.();
+  }
+
   /* ---------- Layers ---------- */
 
   function layerPrefs(){
@@ -89,8 +127,15 @@ views.map=(()=>{
     const prefs=layerPrefs();
     menu.innerHTML=`<p class="kicker">SHOW ON MAP</p>
       <button class="layer-row" data-layer="nus"><span class="mk-nus small"></span><span>NUS shuttle stops</span><span class="switch ${prefs.nus?"on":""}"></span></button>
-      <button class="layer-row" data-layer="public"><span class="mk-public"></span><span>Public bus stops</span><span class="switch ${prefs.public?"on":""}"></span></button>`;
+      <button class="layer-row" data-layer="public"><span class="mk-public"></span><span>Public bus stops</span><span class="switch ${prefs.public?"on":""}"></span></button>
+      <p class="kicker">MAP STYLE</p>
+      <div class="style-options">${Object.entries(MAP_STYLES).map(([k,l])=>`<button class="chip ${mapStylePref()===k?"on":""}" data-style="${k}">${l}</button>`).join("")}</div>`;
     menu.hidden=false;
+    $$("[data-style]",menu).forEach(b=>b.onclick=()=>{
+      try{ localStorage.setItem("nus_map_style",b.dataset.style); }catch{}
+      $$("[data-style]",menu).forEach(o=>o.classList.toggle("on",o===b));
+      applyBaseStyle();
+    });
     $$("[data-layer]",menu).forEach(b=>b.onclick=()=>{
       const next=layerPrefs(); next[b.dataset.layer]=!next[b.dataset.layer];
       localStorage.setItem("nus_map_layers",JSON.stringify(next));
@@ -779,6 +824,7 @@ views.map=(()=>{
     },
     show(params){
       if(!ready) return;
+      applyBaseStyle(); // the app theme may have changed
       // Leaflet measures its container; it was hidden until now.
       setTimeout(()=>map.invalidateSize(),0);
       startLocation();

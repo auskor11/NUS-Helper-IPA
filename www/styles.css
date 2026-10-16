@@ -121,6 +121,9 @@ select.input{background-image:linear-gradient(45deg,transparent 50%,var(--muted)
 .form label{display:flex;flex-direction:column;gap:6px;font-size:13px;color:var(--muted);font-weight:500}
 .two{display:grid;grid-template-columns:1fr 1fr;gap:10px}
 .three{display:grid;grid-template-columns:1.2fr 1fr 1fr;gap:8px}
+.two>*,.three>*{min-width:0}
+.lesson-edit .three{grid-template-columns:1fr 1fr}
+.lesson-edit .three select{grid-column:1/-1}
 .quick-dates{display:flex;gap:8px;overflow-x:auto;scrollbar-width:none}
 .segmented{display:flex;background:var(--surface2);border:1px solid var(--line);border-radius:12px;padding:3px;margin-bottom:14px}
 .segmented button{flex:1;padding:8px;border-radius:9px;font-weight:600;font-size:14px;color:var(--muted);text-align:center}
@@ -183,6 +186,9 @@ select.input{background-image:linear-gradient(45deg,transparent 50%,var(--muted)
 .eta-row{display:grid;grid-template-columns:52px auto 1fr;align-items:center;gap:10px;padding:7px 0}
 .eta-next{font-size:15px}
 .eta-next b{font-size:20px;font-weight:800}
+.eta-next .bus-info{display:flex;align-items:center;gap:5px;font-size:11.5px;color:var(--muted);margin-top:1px;white-space:nowrap}
+.load{width:7px;height:7px;border-radius:50%;flex-shrink:0;background:var(--muted)}
+.load-SEA{background:#22c55e}.load-SDA{background:#f59e0b}.load-LSD{background:#ef4444}
 .eta-then{color:var(--muted);font-size:12.5px;text-align:right}
 .route-badge{display:inline-grid;place-items:center;min-width:44px;height:28px;padding:0 8px;border-radius:8px;font-weight:800;font-size:13px;color:#fff;background:#64748b}
 .route-badge.public{background:#16a34a}
@@ -315,6 +321,12 @@ select.input{background-image:linear-gradient(45deg,transparent 50%,var(--muted)
 .layers-menu{position:absolute;right:72px;bottom:20px;z-index:460;width:240px;background:var(--surface);border:1px solid var(--line);border-radius:16px;box-shadow:var(--shadow);padding:12px}
 .layers-menu .kicker{margin:2px 4px 6px}
 .layer-row{display:flex;align-items:center;gap:10px;width:100%;padding:10px 4px;font-size:14px;font-weight:600}
+.style-options{display:flex;flex-wrap:wrap;gap:6px;padding:0 2px 4px}
+.style-options .chip{padding:6px 10px;font-size:12.5px}
+.style-options .chip.on{background:var(--accent);border-color:var(--accent);color:#fff}
+.layers-menu .kicker+.style-options,.layers-menu .layer-row+.kicker{margin-top:8px}
+.leaflet-gl-layer{z-index:1}
+.leaflet-gl-layer.map-dark{filter:invert(.9) hue-rotate(180deg) saturate(.75) brightness(1.05)}
 .layer-row span:nth-child(2){flex:1}
 .mk-nus.small{width:18px;height:18px;border-width:2px;flex-shrink:0}
 .layer-row .mk-public{width:18px;height:18px;border-radius:6px;flex-shrink:0}
@@ -438,6 +450,14 @@ select.input{background-image:linear-gradient(45deg,transparent 50%,var(--muted)
 .lesson-list .list-row{padding:10px 0}
 .lesson-edit{border:1px solid var(--line);border-radius:14px;padding:12px;display:flex;flex-direction:column;gap:8px;margin-bottom:10px}
 .lesson-edit .link{align-self:flex-start;font-size:13px}
+.weeks-picker{display:flex;flex-direction:column;gap:8px}
+.seg-mini{display:flex;background:var(--surface2);border:1px solid var(--line);border-radius:10px;padding:2px}
+.seg-mini button{flex:1;padding:7px 4px;border-radius:8px;font-size:12.5px;font-weight:600;color:var(--muted)}
+.seg-mini button.on{background:var(--surface);color:var(--text);box-shadow:0 1px 3px rgba(0,0,0,.15)}
+.week-chips{display:grid;grid-template-columns:repeat(7,1fr);gap:6px}
+.week-chips[hidden]{display:none}
+.week-chips button{padding:7px 0;text-align:center;border-radius:8px;border:1px solid var(--line);background:var(--surface2);font-size:13px;font-weight:600;color:var(--muted)}
+.week-chips button.on{background:var(--accent);border-color:var(--accent);color:#fff}
 
 /* ---------- Venue picker ---------- */
 .picker{position:relative}
@@ -514,3 +534,44 @@ body.sheet-open{overflow:hidden}
   .hero h2{font-size:26px}
   .import-actions{grid-template-columns:1fr}
 }
+
+/* ---------- Syllabus ---------- */
+.toolbar b{display:flex;flex-direction:column;align-items:center;text-align:center}
+.toolbar-sub{font-size:12px;font-weight:500;color:var(--muted)}
+.tl-topic{display:flex;align-items:flex-start;gap:5px;margin-top:4px;font-size:12.5px;color:var(--text);opacity:.85;line-height:1.35}
+.tl-topic svg{flex-shrink:0;margin-top:2px;color:var(--accent)}
+.syl-card{display:flex;flex-direction:column;gap:8px}
+.syl-head{display:flex;align-items:baseline;gap:8px;flex-wrap:wrap}
+.syl-head b{font-size:17px}
+.syl-head small{color:var(--muted);font-size:13px}
+.syl-line{display:grid;grid-template-columns:72px 1fr;gap:10px;font-size:14px}
+.syl-line span{color:var(--muted);font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:.03em;padding-top:2px}
+.syl-line p{margin:0;line-height:1.4}
+.syl-none{margin:0;font-size:13.5px}
+.syl-card .sub-head{margin:6px 0 0}
+.section-title{font-size:16px;margin:22px 2px 10px}
+.assess-list{padding:4px 0}
+.assess-row{display:flex;align-items:center;gap:12px;padding:11px 14px}
+.assess-row+.assess-row{border-top:1px solid var(--line)}
+.syl-card .assess-row{padding:8px 0}
+.assess-bar{width:4px;align-self:stretch;border-radius:4px;background:var(--muted);flex-shrink:0}
+.assess-row.t-exam .assess-bar{background:#ef4444}
+.assess-row.t-quiz .assess-bar{background:#f59e0b}
+.assess-row.t-assignment .assess-bar,.assess-row.t-lab .assess-bar{background:#3b82f6}
+.assess-row.t-project .assess-bar,.assess-row.t-presentation .assess-bar{background:#a855f7}
+.assess-main{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
+.assess-main b{font-size:14.5px;display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.assess-main small{color:var(--muted);font-size:12.5px}
+.assess-notes{font-style:italic}
+.assess-weight{font-size:11px;font-weight:700;color:var(--accent);background:color-mix(in srgb,var(--accent) 14%,transparent);border-radius:6px;padding:1px 6px}
+.assess-count{font-size:12px;font-weight:700;color:var(--muted);white-space:nowrap}
+.assess-count.soon{color:#f59e0b}
+.assess-row.past{opacity:.55}
+.assess-past summary{padding:10px 14px;font-size:13px;color:var(--muted);cursor:pointer;border-top:1px solid var(--line)}
+.syl-actions{display:flex;flex-wrap:wrap;gap:8px;justify-content:center;margin:18px 0 8px}
+.empty-state .btn{margin-top:14px}
+.empty-state .btn+.btn{margin-top:8px}
+.empty-state .btn{display:flex;margin-left:auto;margin-right:auto}
+.prompt-box{white-space:pre-wrap;font-size:12px;line-height:1.45;background:var(--surface2);border:1px solid var(--line);border-radius:12px;padding:12px;max-height:40vh;overflow:auto;user-select:text;-webkit-user-select:text;margin-top:12px}
+.file-btn{cursor:pointer;margin-bottom:10px}
+.check-row{display:flex;align-items:center;gap:8px;font-size:14px;margin:10px 0}
