@@ -14,8 +14,15 @@ function openCoursesMenu(){
       <button class="btn primary" data-syl="import">Import or update</button>
       <button class="btn secondary" data-syl="help">Make the file with Claude</button>
       ${has?`<button class="btn danger-soft" data-syl="clear">Remove syllabus</button>`:""}
+    </div>
+    <h4 class="sub-head">Semester</h4>
+    <div class="sheet-actions">
+      <button class="btn secondary" id="menuFinish">Finish ${esc(semesterLabel(state.semester.academicYear,state.semester.semester))}</button>
+      <button class="btn ghost" id="menuPast">Add a past semester</button>
     </div>`);
   bindSyllabusActions($("#sheetContent"));
+  $("#menuFinish").onclick=openFinishSemester;
+  $("#menuPast").onclick=openAddPastSemester;
 }
 
 function coursesEmptyHTML(){
@@ -124,17 +131,18 @@ views.courses=(()=>{
         eyebrow:`AY${esc(state.semester.academicYear)} · Sem ${esc(state.semester.semester)}${aw?` · ${esc(aw.label)}`:""}`,
         actions:coursesMenuButton()
       })}
-      ${mods.length?`
-        <div class="segmented">
-          ${[["week","This week"],["assess","Assessments"],["grades","Grades"]].map(([k,l])=>`<button class="${mode===k?"on":""}" data-mode="${k}">${l}</button>`).join("")}
-        </div>
-        ${mode==="week"?weekView(mods):mode==="assess"?assessmentTimelineHTML(allAssessments()):gradesView(mods)}`
-      :coursesEmptyHTML()}`;
+      <div class="segmented courses-tabs">
+        ${[["week","This week"],["assess","Assessments"],["grades","Grades"],["gpa","GPA"]].map(([k,l])=>`<button class="${mode===k?"on":""}" data-mode="${k}">${l}</button>`).join("")}
+      </div>
+      ${mode==="gpa"?gpaViewHTML()
+        :!mods.length?`${finishBannerHTML()}${coursesEmptyHTML()}`
+        :mode==="week"?finishBannerHTML()+weekView(mods):mode==="assess"?assessmentTimelineHTML(allAssessments()):gradesView(mods)}`;
     $("#coursesMenu",el).onclick=openCoursesMenu;
     $$("[data-mode]",el).forEach(b=>b.onclick=()=>setMode(b.dataset.mode));
     $("#prevWeek",el)?.addEventListener("click",()=>{ selected=addDays(selected,-7); render(); });
     $("#nextWeek",el)?.addEventListener("click",()=>{ selected=addDays(selected,7); render(); });
     bindSyllabusActions(el);
+    bindGpaView(el);
   }
 
   return {
@@ -145,7 +153,8 @@ views.courses=(()=>{
       selected=new Date();
       render();
     },
-    refresh(){ render(); }
+    // Don't re-render under the cursor while a units field is being edited.
+    refresh(){ if(!el.contains(document.activeElement)||document.activeElement.tagName!=="INPUT") render(); }
   };
 })();
 

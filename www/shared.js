@@ -5,7 +5,9 @@
 
 const ACADEMIC_YEAR = "2026-2027";
 const SEMESTER = "1";
-const NUSMODS_BASE = `https://api.nusmods.com/v2/${ACADEMIC_YEAR}`;
+// The semester the app is on (state.semester) decides which NUSMods data is used.
+const nusmodsBase = () => `https://api.nusmods.com/v2/${state.semester?.academicYear || ACADEMIC_YEAR}`;
+const currentSemesterNo = () => String(state.semester?.semester || SEMESTER);
 const DAYS = ["Monday","Tuesday","Wednesday","Thursday","Friday","Saturday","Sunday"];
 
 const $ = (s, r=document) => r.querySelector(s);
@@ -21,6 +23,8 @@ const state = {
   activities: [],
   tasks: [],
   places: [],   // saved map places, e.g. {id, name:"Home", icon:"home", lat, lng, address}
+  archive: [],  // finished semesters (app/archive.js): {id, academicYear, semester, modules:[{code,name,units,grade,su}], lessons, syllabus}
+  gpa: {suLimit:32},
   syllabus: {modules:[]},   // weekly topics and assessments per module (app/syllabus.js)
   semester: {academicYear:ACADEMIC_YEAR, semester:SEMESTER}
 };
@@ -82,6 +86,8 @@ function resetState(){
   state.tasks=[];
   state.places=[];
   state.syllabus={modules:[]};
+  state.archive=[];
+  state.gpa={suLimit:32};
   state.semester={academicYear:ACADEMIC_YEAR, semester:SEMESTER};
   lastRemoteCloudChangeAt=0;
 }
@@ -111,6 +117,8 @@ function startCloudSync(){
       if(Array.isArray(remote.tasks)) state.tasks=remote.tasks;
       if(Array.isArray(remote.places)) state.places=remote.places;
       if(remote.syllabus && Array.isArray(remote.syllabus.modules)) state.syllabus=remote.syllabus;
+      if(Array.isArray(remote.archive)) state.archive=remote.archive;
+      if(remote.gpa) state.gpa={suLimit:32,...remote.gpa};
       if(remote.semester) state.semester=remote.semester;
     }
 
@@ -280,6 +288,7 @@ function academicWeek(date){
   if(i===14) return {kind:"reading",week:null,label:"Reading week"};
   if(i===15||i===16) return {kind:"exam",week:null,label:`Exam week ${i-14}`};
   if(i===-1) return {kind:"orientation",week:null,label:"Orientation week"};
+  if(i<-1) return {kind:"break",week:null,label:`Sem ${state.semester?.semester} starts ${start.toLocaleDateString("en-SG",{day:"numeric",month:"short"})}`};
   return {kind:"break",week:null,label:"Vacation"};
 }
 
@@ -525,7 +534,7 @@ async function setupInstall(){
 let nusModuleListCache=null;
 async function fetchNUSModsList(){
   if(nusModuleListCache) return nusModuleListCache;
-  const r=await fetch(`${NUSMODS_BASE}/moduleList.json`);
+  const r=await fetch(`${nusmodsBase()}/moduleList.json`);
   if(!r.ok) throw new Error(`NUSMods module list failed (${r.status})`);
   nusModuleListCache=await r.json();
   return nusModuleListCache;
@@ -535,18 +544,18 @@ async function fetchNUSModsModule(code){
   const errors=[];
   let moduleData=null;
   try{
-    const r=await fetch(`${NUSMODS_BASE}/modules/${encodeURIComponent(code)}.json`);
+    const r=await fetch(`${nusmodsBase()}/modules/${encodeURIComponent(code)}.json`);
     if(r.ok){
       moduleData=await r.json();
       // Module info lists timetables per semester.
-      const sem=(moduleData.semesterData||[]).find(s=>String(s.semester)===SEMESTER);
+      const sem=(moduleData.semesterData||[]).find(s=>String(s.semester)===currentSemesterNo());
       if(sem && Array.isArray(sem.timetable)) return {...moduleData,timetable:sem.timetable};
       if(Array.isArray(moduleData.timetable)) return moduleData;
     }else errors.push(`module endpoint returned ${r.status}`);
   }catch{ errors.push("module endpoint could not be reached"); }
 
   try{
-    const r=await fetch(`${NUSMODS_BASE}/semesters/${SEMESTER}/${encodeURIComponent(code)}/timetable.json`);
+    const r=await fetch(`${nusmodsBase()}/semesters/${currentSemesterNo()}/${encodeURIComponent(code)}/timetable.json`);
     if(r.ok){
       const timetable=await r.json();
       return {...(moduleData||{}),moduleCode:moduleData?.moduleCode||code,title:moduleData?.title||moduleName(code),
@@ -585,7 +594,8 @@ function normaliseLessonData(data, code){
       venue:x.venue||x.location||""
     };
   }).filter(x=>x && x.day && x.startTime && x.endTime);
-  return {moduleCode:data.moduleCode||code,title:data.title||moduleName(code),timetable};
+  const units=parseFloat(data.moduleCredit);
+  return {moduleCode:data.moduleCode||code,title:data.title||moduleName(code),units:Number.isFinite(units)?units:null,timetable};
 }
 
 // [["Lecture::1",[lessons]], ...]

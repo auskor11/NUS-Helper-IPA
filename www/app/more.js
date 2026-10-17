@@ -179,7 +179,7 @@ views["more/modules"]=(()=>{
           const m=data.timetable.filter(l=>typeMatches(w.type,l.lessonType)&&String(l.classNo).toUpperCase()===w.classNo.toUpperCase());
           if(m.length) chosen.push(...m); else problems.push(`${item.code} ${w.raw} wasn't found`);
         }
-        results.push({code:item.code,name:data.title,lessons:chosen});
+        results.push({code:item.code,name:data.title,units:data.units,lessons:chosen});
       }catch(e){ problems.push(`${item.code}: ${e.message}`); }
     }
     if(!results.length){
@@ -187,11 +187,12 @@ views["more/modules"]=(()=>{
       return;
     }
     const codes=new Set(results.map(r=>r.code));
+    const prevMods=new Map(state.modules.map(m=>[m.code,m])); // keep grade / S/U choices
     state.modules=state.modules.filter(m=>!codes.has(m.code));
     state.lessons=state.lessons.filter(l=>!codes.has(l.module));
     let n=Date.now();
     for(const r of results){
-      state.modules.push({code:r.code,name:r.name});
+      state.modules.push({...prevMods.get(r.code),code:r.code,name:r.name,...(r.units!=null?{units:r.units}:{})});
       r.lessons.forEach(l=>state.lessons.push({...l,module:r.code,id:`${r.code}-${n++}`}));
     }
     save({immediate:true});
@@ -255,10 +256,10 @@ views["more/modules"]=(()=>{
       return typeOrder(ta)-typeOrder(tb) || ta.localeCompare(tb) || na.localeCompare(nb,undefined,{numeric:true});
     });
     if(!groups.length){
-      openModal(`<h2>${esc(code)}</h2><p class="subtle">${esc(data.title)}</p><div class="error-box">NUSMods has no Semester ${esc(SEMESTER)} classes for this module.</div>
+      openModal(`<h2>${esc(code)}</h2><p class="subtle">${esc(data.title)}</p><div class="error-box">NUSMods has no Semester ${esc(currentSemesterNo())} classes for this module.</div>
         <button class="btn secondary full" id="addAnyway">Add without classes</button>`);
       $("#addAnyway").onclick=()=>{
-        if(!state.modules.some(m=>m.code===code)) state.modules.push({code,name:data.title});
+        if(!state.modules.some(m=>m.code===code)) state.modules.push({code,name:data.title,...(data.units!=null?{units:data.units}:{})});
         closeModal(); save();
       };
       return;
@@ -287,8 +288,9 @@ views["more/modules"]=(()=>{
     });
     $("#saveGroups").onclick=()=>{
       const chosen=data.timetable.filter(l=>picked.has(lessonKey(l)));
+      const prev=state.modules.find(m=>m.code===code)||{};
       state.modules=state.modules.filter(m=>m.code!==code);
-      state.modules.push({code,name:data.title});
+      state.modules.push({...prev,code,name:data.title,...(data.units!=null?{units:data.units}:{})});
       if(replace) state.lessons=state.lessons.filter(l=>l.module!==code);
       let n=Date.now();
       chosen.forEach(l=>state.lessons.push({...l,module:code,id:`${code}-${n++}`}));

@@ -423,7 +423,7 @@ function loadVenueIndex(){
   venueIndexPromise=(async()=>{
     const byCode=new Map();
     const [list,coords]=await Promise.allSettled([
-      getJSON(`${NUSMODS_BASE}/semesters/${SEMESTER}/venues.json`),
+      getJSON(`${nusmodsBase()}/semesters/${currentSemesterNo()}/venues.json`),
       getJSON("https://raw.githubusercontent.com/nusmodifications/nusmods/master/website/api/optimiser/_constants/venues.json")
         .catch(()=>getJSON("https://api.github.com/repos/nusmodifications/nusmods/contents/website/api/optimiser/_constants/venues.json?ref=master")
           .then(p=>JSON.parse(new TextDecoder().decode(Uint8Array.from(atob(String(p.content).replace(/\s/g,"")),c=>c.charCodeAt(0))))))

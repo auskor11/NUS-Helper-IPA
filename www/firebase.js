@@ -154,6 +154,8 @@
             tasks:snapshot.tasks||[],
             places:snapshot.places||[],
             syllabus:snapshot.syllabus||{modules:[]},
+            archive:snapshot.archive||[],
+            gpa:snapshot.gpa||{suLimit:32},
             semester:snapshot.semester||{},
             clientUpdatedAt:Date.now(),
             updatedAt:window.firebase.firestore.FieldValue.serverTimestamp()
