@@ -715,3 +715,5 @@ body.sheet-open{overflow:hidden}
 .past-week{font-size:12.5px;color:var(--muted);padding:3px 0}
 .past-week b{color:var(--text);margin-right:4px}
 .remove-mod{margin:0 14px 10px;font-size:12.5px}
+.grade-select.pf{font-size:13px}
+.pf-tag{display:grid;place-items:center;border:1px dashed var(--line);border-radius:9px;padding:7px 0;font-size:11.5px;font-weight:700;color:var(--muted)}

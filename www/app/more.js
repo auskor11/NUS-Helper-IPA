@@ -179,7 +179,7 @@ views["more/modules"]=(()=>{
           const m=data.timetable.filter(l=>typeMatches(w.type,l.lessonType)&&String(l.classNo).toUpperCase()===w.classNo.toUpperCase());
           if(m.length) chosen.push(...m); else problems.push(`${item.code} ${w.raw} wasn't found`);
         }
-        results.push({code:item.code,name:data.title,units:data.units,lessons:chosen});
+        results.push({code:item.code,name:data.title,units:data.units,pf:data.pf,lessons:chosen});
       }catch(e){ problems.push(`${item.code}: ${e.message}`); }
     }
     if(!results.length){
@@ -192,7 +192,7 @@ views["more/modules"]=(()=>{
     state.lessons=state.lessons.filter(l=>!codes.has(l.module));
     let n=Date.now();
     for(const r of results){
-      state.modules.push({...prevMods.get(r.code),code:r.code,name:r.name,...(r.units!=null?{units:r.units}:{})});
+      state.modules.push({...prevMods.get(r.code),code:r.code,name:r.name,...(r.units!=null?{units:r.units}:{}),pf:!!r.pf,...(r.pf&&!prevMods.get(r.code)?.grade?{grade:"CS"}:{})});
       r.lessons.forEach(l=>state.lessons.push({...l,module:r.code,id:`${r.code}-${n++}`}));
     }
     save({immediate:true});
@@ -259,7 +259,7 @@ views["more/modules"]=(()=>{
       openModal(`<h2>${esc(code)}</h2><p class="subtle">${esc(data.title)}</p><div class="error-box">NUSMods has no Semester ${esc(currentSemesterNo())} classes for this module.</div>
         <button class="btn secondary full" id="addAnyway">Add without classes</button>`);
       $("#addAnyway").onclick=()=>{
-        if(!state.modules.some(m=>m.code===code)) state.modules.push({code,name:data.title,...(data.units!=null?{units:data.units}:{})});
+        if(!state.modules.some(m=>m.code===code)) state.modules.push({code,name:data.title,...(data.units!=null?{units:data.units}:{}),pf:!!data.pf,...(data.pf&&!prev?.grade?{grade:"CS"}:{})});
         closeModal(); save();
       };
       return;
@@ -290,7 +290,7 @@ views["more/modules"]=(()=>{
       const chosen=data.timetable.filter(l=>picked.has(lessonKey(l)));
       const prev=state.modules.find(m=>m.code===code)||{};
       state.modules=state.modules.filter(m=>m.code!==code);
-      state.modules.push({...prev,code,name:data.title,...(data.units!=null?{units:data.units}:{})});
+      state.modules.push({...prev,code,name:data.title,...(data.units!=null?{units:data.units}:{}),pf:!!data.pf,...(data.pf&&!prev?.grade?{grade:"CS"}:{})});
       if(replace) state.lessons=state.lessons.filter(l=>l.module!==code);
       let n=Date.now();
       chosen.forEach(l=>state.lessons.push({...l,module:code,id:`${code}-${n++}`}));

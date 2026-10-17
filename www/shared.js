@@ -258,6 +258,11 @@ function durationLabel(mins){
 
 function moduleName(code){ return state.modules.find(m=>m.code===code)?.name || code || "No module"; }
 
+// Graded Completed Satisfactory/Unsatisfactory (CS/CU) on NUSMods, e.g. CFG1002.
+function isPassFail(moduleData){
+  return /satisfactory\s*\/\s*unsatisfactory/i.test(String(moduleData?.gradingBasisDescription||""));
+}
+
 /* ---------- Academic weeks ---------- */
 
 // Monday of Week 1 for each semester, from NUSMods' academic calendar
@@ -595,7 +600,8 @@ function normaliseLessonData(data, code){
     };
   }).filter(x=>x && x.day && x.startTime && x.endTime);
   const units=parseFloat(data.moduleCredit);
-  return {moduleCode:data.moduleCode||code,title:data.title||moduleName(code),units:Number.isFinite(units)?units:null,timetable};
+  return {moduleCode:data.moduleCode||code,title:data.title||moduleName(code),units:Number.isFinite(units)?units:null,
+    pf:isPassFail(data),timetable};
 }
 
 // [["Lecture::1",[lessons]], ...]

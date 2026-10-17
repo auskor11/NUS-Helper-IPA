@@ -2,6 +2,7 @@
  *   state.archive: finished semesters, newest last:
  *     {id, academicYear, semester, archivedAt, manual, modules:[{code,name,units,grade,su}], lessons, syllabus}
  *   state.modules[i].grade / .su: this semester's expected grade and S/U plan.
+ *   .pf: graded CS/CU only (pass/fail, from NUSMods), so the grade is CS or CU.
  *   state.gpa.suLimit: S/U units allowed (NUS: 32 for most students).
  * Shown as Courses → GPA, and courses/semester for one past semester.
  */
@@ -63,7 +64,7 @@ function openFinishSemester(){
     <div class="sheet-actions"><button class="btn primary" id="doFinish">Finish semester</button></div>`);
   $("#doFinish").onclick=()=>{
     const entry={id:uid(),academicYear:cur.academicYear,semester:String(cur.semester),archivedAt:Date.now(),
-      modules:state.modules.map(m=>({code:m.code,name:m.name||"",units:unitsOf(m),grade:m.grade||"",su:!!m.su})),
+      modules:state.modules.map(m=>({code:m.code,name:m.name||"",units:unitsOf(m),grade:m.grade||"",su:!!m.su,...(m.pf?{pf:true}:{})})),
       lessons:clone(state.lessons), syllabus:clone(state.syllabus||{modules:[]})};
     state.archive=[...(state.archive||[]),entry];
     state.modules=[]; state.lessons=[]; state.syllabus={modules:[]};
@@ -84,22 +85,33 @@ function finishBannerHTML(){
 /* ---------- Courses → GPA ---------- */
 
 let unitsLookupDone=false;
-// Modules added before units were recorded: look them up once on NUSMods.
+// Modules added before units and pass/fail were recorded: look them up once
+// on NUSMods. A pass/fail module starts as CS (passed).
 async function fillMissingUnits(){
   if(unitsLookupDone) return;
   unitsLookupDone=true;
   let changed=false;
-  for(const m of state.modules.filter(m=>m.units==null)){
+  for(const m of state.modules.filter(m=>m.units==null||m.pf==null)){
     try{
       const d=await getJSON(`${nusmodsBase()}/modules/${encodeURIComponent(m.code)}.json`);
-      const u=parseFloat(d.moduleCredit); if(Number.isFinite(u)){ m.units=u; changed=true; }
+      const u=parseFloat(d.moduleCredit); if(m.units==null&&Number.isFinite(u)) m.units=u;
+      m.pf=isPassFail(d);
+      if(m.pf&&!(m.grade==="CS"||m.grade==="CU")){ m.grade="CS"; m.su=false; }
+      changed=true;
     }catch{}
   }
   if(changed) save();
 }
 
-function gradeSelectHTML(value,attrs){
-  return `<select class="grade-select ${value?"set":""}" ${attrs}><option value="">–</option>${GRADE_OPTIONS.map(g=>`<option ${g===value?"selected":""}>${g}</option>`).join("")}</select>`;
+function gradeSelectHTML(value,attrs,pf=false){
+  const opts=pf?[["CS","Pass"],["CU","Fail"]]:[["","–"],...GRADE_OPTIONS.map(g=>[g,g])];
+  return `<select class="grade-select ${value?"set":""} ${pf?"pf":""}" ${attrs}>${opts.map(([v,l])=>`<option value="${v}" ${v===value?"selected":""}>${l}</option>`).join("")}</select>`;
+}
+
+// The S/U cell: pass/fail modules can't be S/U'd, so they show a label.
+function suCellHTML(m,attr){
+  return m.pf?`<span class="pf-tag" title="Graded pass/fail (CS/CU); doesn't count towards GPA or S/U">P/F</span>`
+    :`<button class="su-toggle ${m.su?"on":""}" ${attr} aria-pressed="${m.su?"true":"false"}">S/U</button>`;
 }
 
 function gpaViewHTML(){
@@ -125,8 +137,8 @@ function gpaViewHTML(){
       ${state.modules.map((m,i)=>`<div class="gpa-row">
         <span class="gpa-mod"><b>${esc(m.code)}</b><small>${esc(m.name||moduleName(m.code))}</small></span>
         <input class="units-input" type="number" min="0" step="0.5" inputmode="decimal" value="${esc(String(unitsOf(m)))}" data-cur-units="${i}" aria-label="Units for ${esc(m.code)}">
-        ${gradeSelectHTML(m.grade||"",`data-cur-grade="${i}" aria-label="Expected grade for ${esc(m.code)}"`)}
-        <button class="su-toggle ${m.su?"on":""}" data-cur-su="${i}" aria-pressed="${m.su?"true":"false"}">S/U</button>
+        ${gradeSelectHTML(m.grade||"",`data-cur-grade="${i}" aria-label="Expected grade for ${esc(m.code)}"`,m.pf)}
+        ${suCellHTML(m,`data-cur-su="${i}"`)}
       </div>`).join("")}
       <div class="gpa-foot">Semester GPA <b>${gpaText(now.gpa)}</b>${now.units?` · ${now.units} units`:""}</div>
     </div>
@@ -224,8 +236,8 @@ views["courses/semester"]=(()=>{
           <div class="gpa-row">
             <span class="gpa-mod">${s.manual||m.manual?`<input class="code-input" value="${esc(m.code)}" placeholder="Code" data-code="${i}" autocapitalize="characters">`:`<b>${esc(m.code)}</b><small>${esc(m.name||"")}</small>`}</span>
             <input class="units-input" type="number" min="0" step="0.5" inputmode="decimal" value="${esc(String(unitsOf(m)))}" data-units="${i}" aria-label="Units">
-            ${gradeSelectHTML(m.grade||"",`data-grade="${i}" aria-label="Grade"`)}
-            <button class="su-toggle ${m.su?"on":""}" data-su="${i}" aria-pressed="${m.su?"true":"false"}">S/U</button>
+            ${gradeSelectHTML(m.grade||"",`data-grade="${i}" aria-label="Grade"`,m.pf)}
+            ${suCellHTML(m,`data-su="${i}"`)}
           </div>
           ${moduleSyllabusHTML(s,m.code)}
           ${s.manual||m.manual?`<button class="link danger-text remove-mod" data-remove="${i}">Remove</button>`:""}
