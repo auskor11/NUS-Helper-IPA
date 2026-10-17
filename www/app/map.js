@@ -113,11 +113,36 @@ views.map=(()=>{
 
   function mapStylePref(){ try{ return localStorage.getItem("nus_map_style")||"auto"; }catch{ return "auto"; } }
 
+  // MapLibre is ~850 KB, so it loads the first time the map is opened rather
+  // than at app start-up.
+  let mapLibrePromise=null, mapLibreFailed=false;
+  function loadMapLibre(){
+    if(L.maplibreGL) return Promise.resolve();
+    if(mapLibrePromise) return mapLibrePromise;
+    const add=(tag,attrs)=>new Promise((resolve,reject)=>{
+      const n=Object.assign(document.createElement(tag),attrs);
+      n.onload=resolve; n.onerror=()=>reject(new Error(`Couldn't load ${attrs.src||attrs.href}`));
+      document.head.appendChild(n);
+    });
+    mapLibrePromise=Promise.all([
+      add("link",{rel:"stylesheet",href:"/vendor/maplibre/maplibre-gl.css"}),
+      add("script",{src:"/vendor/maplibre/maplibre-gl.js"}).then(()=>add("script",{src:"/vendor/maplibre/leaflet-maplibre-gl.js"}))
+    ]).catch(err=>{ console.warn(err); mapLibrePromise=null; throw err; });
+    return mapLibrePromise;
+  }
+
   function applyBaseStyle(){
     if(!map) return;
     const pref=mapStylePref();
     let style=pref==="auto" ? (document.body.classList.contains("light")?"liberty":"dark") : pref;
-    if(style!=="classic" && !(L.maplibreGL && window.maplibregl?.supported?.()!==false)) style="classic";
+    if(style!=="classic" && !L.maplibreGL){
+      if(!mapLibreFailed){
+        loadMapLibre().then(applyBaseStyle).catch(()=>{ mapLibreFailed=true; applyBaseStyle(); });
+        return;
+      }
+      style="classic"; // offline: plain tiles until the next launch
+    }
+    if(style!=="classic" && window.maplibregl?.supported?.()===false) style="classic";
     if(style===baseStyle) return;
     if(baseLayer) map.removeLayer(baseLayer);
     baseStyle=style;

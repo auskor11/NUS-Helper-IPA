@@ -36,7 +36,7 @@ for (const name of fs.readdirSync(src)) {
   const full = path.join(src, name);
   if (name.startsWith(".") || SKIP.has(name)) continue;
   if (fs.statSync(full).isDirectory()) {
-    if (name === "assets" || name === "app") fs.cpSync(full, path.join(out, name), { recursive: true });
+    if (name === "assets" || name === "app" || name === "vendor") fs.cpSync(full, path.join(out, name), { recursive: true });
     continue;
   }
   if (KEEP_EXT.has(path.extname(name))) fs.copyFileSync(full, path.join(out, name));

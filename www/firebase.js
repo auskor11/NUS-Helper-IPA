@@ -4,7 +4,9 @@
    /login.html <-> /index.html redirect loop caused by checking too early.
 */
 (function(){
-  const SDK="https://www.gstatic.com/firebasejs/12.16.0";
+  // Firebase 12.16.0 compat SDK, served with the app (vendor/firebase) so
+  // start-up doesn't wait on downloading it.
+  const SDK="/vendor/firebase";
 
   window.nusFirebase={
     configured:false,user:null,error:null,
@@ -74,6 +76,10 @@
       const app=window.firebase.initializeApp(runtimeConfig);
       const auth=app.auth();
       const db=app.firestore();
+      // Keep a copy of the data on the device: the app opens with it straight
+      // away and syncs in the background. Must run before any other Firestore call.
+      try{ await db.enablePersistence({synchronizeTabs:true}); }
+      catch(e){ console.warn("Offline cache unavailable",e.code||e); }
       const provider=new window.firebase.auth.GoogleAuthProvider();
       provider.setCustomParameters({prompt:"select_account"});
 
