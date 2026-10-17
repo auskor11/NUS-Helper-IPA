@@ -105,7 +105,7 @@ ${calendar}- Dates are YYYY-MM-DD and times are 24-hour HH:MM (Singapore time). 
 - "lecture", "tutorial", "recitation" and "lab" match NUSMods lesson types. If a module names them differently (e.g. Studio is the tutorial, Reflection is the recitation), use the closest field and keep the module's own name in the text. If there are two lectures a week, put both in "lecture", e.g. "Wed: L9A Environment Model · Fri: L9B Lists and Loops II".
 - "type" is one of: ${ASSESSMENT_TYPES.join(", ")}.
 - Keep each text short (one line). Leave out any field the sources don't say; don't guess.
-- One entry per module code, with every week that has content.${codes?`\n- My modules this semester: ${codes}.`:""}`;
+- One entry per module code, with every week that has content. Only include modules you were given materials for; leave out any module with no materials (don't add empty entries).${codes?`\n- For reference, my modules this semester are: ${codes}.`:""}`;
 }
 
 /* ---------- Import ---------- */
@@ -144,8 +144,11 @@ function parseSyllabus(text){
     })).filter(a=>a.title);
     return {code,title:str(m.title||m.name),weeks,assessments};
   }).filter(Boolean);
-  if(!modules.length) throw new Error("No modules with a code were found in the file.");
-  return modules;
+  // A module with no weeks and no assessments would wipe what's already
+  // imported for it, so it's skipped.
+  const filled=modules.filter(m=>m.weeks.length||m.assessments.length);
+  if(!filled.length) throw new Error("The file has no weekly topics or assessments for any module.");
+  return filled;
 }
 
 // Replaces the syllabus of the modules in the file and keeps the others.
