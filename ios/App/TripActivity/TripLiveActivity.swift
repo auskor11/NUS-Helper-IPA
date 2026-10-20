@@ -39,7 +39,7 @@ struct TripLiveActivity: Widget {
                         HStack {
                             Text(s.subtitle).font(.caption).foregroundStyle(.secondary).lineLimit(1)
                             Spacer()
-                            if s.phase != "arrived" {
+                            if s.phase != "arrived" && s.phase != "street" {
                                 Text("Arrive \(s.eta, style: .time)").font(.caption).foregroundStyle(.secondary)
                             }
                         }
@@ -140,7 +140,7 @@ struct LockScreenTripView: View {
             HStack {
                 Text(state.subtitle).font(.subheadline).foregroundStyle(.white.opacity(0.75)).lineLimit(1)
                 Spacer()
-                if state.phase != "arrived" {
+                if state.phase != "arrived" && state.phase != "street" {
                     Text("Arrive \(state.eta, style: .time)").font(.subheadline).foregroundStyle(.white.opacity(0.75))
                 }
             }

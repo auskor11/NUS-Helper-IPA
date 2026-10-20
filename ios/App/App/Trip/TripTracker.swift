@@ -302,11 +302,13 @@ final class TripTracker: NSObject, CLLocationManagerDelegate {
             let secs = left / speed
             let icon = ["cycle": "bicycle", "drive": "car.fill"][plan.mode] ?? "figure.walk"
             let verb = ["cycle": "Cycle", "drive": "Drive"][plan.mode] ?? "Walk"
-            // Walking shows distance left; cycling and driving show time left.
-            let walking = plan.mode == "walk"
+            // Walk, cycle and drive: distance left in the island, with the
+            // time left and arrival time underneath.
+            let arrive = now.addingTimeInterval(secs)
             return .init(phase: "street", icon: icon, line: "", lineColor: "#8b7cff",
-                         title: "\(verb) to \(plan.destination)", subtitle: walking ? "About \(formatMinutes(secs))" : "\(formatDistance(left)) left",
-                         metric: walking ? formatDistance(left) : formatMinutes(secs), countdownTo: nil, stopsLeft: 0, totalStops: 0,
+                         title: "\(verb) to \(plan.destination)",
+                         subtitle: "\(formatMinutes(secs)) left · arrive \(timeString(arrive))",
+                         metric: formatDistance(left), countdownTo: nil, stopsLeft: 0, totalStops: 0,
                          eta: now.addingTimeInterval(secs))
         }
 

@@ -68,7 +68,7 @@ views.map=(()=>{
     const t=loadActiveTrip();
     if(!t){ toast("No trip in progress."); return; }
     if(t.kind==="transit") openCommute(t.commute,{trip:true});
-    else showRoute(t.dest);
+    else showRoute(t.dest,{mode:t.mode});
   }
 
   /* ---------- Markers ---------- */
@@ -428,9 +428,10 @@ views.map=(()=>{
 
   // Directions with Transit (NUS shuttle, bus, MRT), Walk, Cycle and Drive.
   // Every mode loads at once and each result appears as soon as it arrives.
-  async function showRoute(dest){
+  async function showRoute(dest,{mode:startMode=null}={}){
     clearInterval(refreshTimer);
     clearRoute();
+    selected=dest; // also when reopened from a trip, not via selectPlace
     const back=()=>dest.type==="nus"||dest.type==="public"?selectStop(dest):selectPlace(dest);
     const title=dest.type==="public"||dest.type==="nus"?dest.name:dest.code;
     openPanel(`<p class="kicker">DIRECTIONS</p><h2>${esc(title)}</h2>
@@ -658,7 +659,7 @@ views.map=(()=>{
       }]};
     }
 
-    pick(straight>1000||distanceM(from,dest)>600?"transit":"walk");
+    pick(startMode||(straight>1000||distanceM(from,dest)>600?"transit":"walk"));
   }
 
   /* ---------- Saved commutes (app/commutes.js) ---------- */
