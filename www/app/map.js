@@ -931,7 +931,8 @@ views.map=(()=>{
     showResults(local,[],{query:q,loading:q.length>=minLen});
     if(q.length<minLen) return;
     const c=map.getCenter();
-    const nearby=await searchPlacesInArea(q,viewBounds(),{lat:c.lat,lng:c.lng});
+    const nearby=await searchPlacesInArea(q,viewBounds(),{lat:c.lat,lng:c.lng},{
+      onPartial:rows=>{ if(input.value.trim()===q) showResults(local,rows.slice(0,15),{query:q,loading:true}); }});
     if(input.value.trim()!==q) return;
     showResults(local,nearby.slice(0,15),{query:q});
     if(pins && nearby.length) showPins(nearby,q);

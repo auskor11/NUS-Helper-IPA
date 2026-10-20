@@ -28,17 +28,17 @@ function nearestNusStops(pos,n=3){
 // Some live-data APIs don't send CORS headers. Inside the iOS app we can call
 // them natively instead; in a browser those calls fail and callers fall back.
 // Every request gives up after `timeout` ms so the UI never waits forever.
-async function getJSON(url,{native=false,timeout=12000}={}){
+async function getJSON(url,{native=false,timeout=12000,headers={}}={}){
   const http=window.Capacitor?.Plugins?.CapacitorHttp;
   if(native && isNativeApp() && http){
-    const r=await http.get({url,headers:{Accept:"application/json"},connectTimeout:timeout,readTimeout:timeout});
+    const r=await http.get({url,headers:{Accept:"application/json",...headers},connectTimeout:timeout,readTimeout:timeout});
     if(r.status<200||r.status>=300) throw new Error(`Request failed (${r.status})`);
     return typeof r.data==="string" ? JSON.parse(r.data) : r.data;
   }
   const ctrl=new AbortController();
   const timer=setTimeout(()=>ctrl.abort(),timeout);
   try{
-    const r=await fetch(url,{headers:{Accept:"application/json"},cache:"no-store",signal:ctrl.signal});
+    const r=await fetch(url,{headers:{Accept:"application/json",...headers},cache:"no-store",signal:ctrl.signal});
     if(!r.ok) throw new Error(`Request failed (${r.status})`);
     return await r.json();
   }catch(err){
@@ -584,7 +584,8 @@ async function searchPlacesExternal(query){
 
 // Places matching `query` around the visible map, nearest to `center` first,
 // like Google Maps: search the view, then a wider area, then all of Singapore
-// until there are enough results. Uses OpenStreetMap (Nominatim).
+// until there are enough results. Apple Maps in the iOS app, OpenStreetMap
+// on the web, both topped up with OneMap.
 const KIND_LABELS={fast_food:"Fast food",restaurant:"Restaurant",cafe:"Café",food_court:"Food court",bar:"Bar",
   supermarket:"Supermarket",convenience:"Convenience store",mall:"Shopping mall",bank:"Bank",atm:"ATM",
   pharmacy:"Pharmacy",clinic:"Clinic",hospital:"Hospital",station:"Station",subway_entrance:"MRT entrance",
@@ -616,13 +617,80 @@ async function searchPlacesApple(q,bounds,center,min){
   return out.sort((a,b)=>a.distance-b.distance);
 }
 
-async function searchPlacesInArea(query,bounds,center,{min=8}={}){
+// OneMap's search is Singapore's official address list: every HDB block,
+// condo, building and postal code. Apple Maps and OpenStreetMap sometimes
+// miss these or swap in a similar name ("Clementi Peaks" -> "Clementi Park").
+const ONEMAP_CAPS=new Set(["NUS","NTU","SMU","SUTD","SIT","SUSS","MRT","LRT","HDB","CC","RC","ITE","JC","SAF","MOE","NUH","SGH","TTSH","KKH","CBD","MSCP","PCN","UOB","OCBC","DBS","II","III","IV"]);
+function oneMapTitle(s){
+  return String(s||"").toLowerCase().replace(/[a-z0-9'&.]+/g,w=>{
+    const up=w.toUpperCase();
+    return ONEMAP_CAPS.has(up)||/\d/.test(w)?up:w[0].toUpperCase()+w.slice(1);
+  });
+}
+
+// Without a token OneMap allows about one search a second, so searches are
+// spaced out and repeats come from a cache.
+const oneMapSearchCache=new Map();
+let lastOneMapSearchAt=0;
+
+async function searchPlacesOneMap(q,center){
+  const key=q.toLowerCase();
+  if(!oneMapSearchCache.has(key)){
+    const token=await getOneMapToken().catch(()=>null);
+    const wait=(token?250:1100)-(Date.now()-lastOneMapSearchAt);
+    if(wait>0) await new Promise(r=>setTimeout(r,wait));
+    lastOneMapSearchAt=Date.now();
+    const params=new URLSearchParams({searchVal:q,returnGeom:"Y",getAddrDetails:"Y",pageNum:"1"});
+    const data=await getJSON(`https://www.onemap.gov.sg/api/common/elastic/search?${params}`,
+      {timeout:8000,native:true,headers:token?{Authorization:token}:{}});
+    oneMapSearchCache.set(key,data.results||[]);
+  }
+  return oneMapSearchCache.get(key).map(x=>{
+    const lat=+x.LATITUDE, lng=+x.LONGITUDE;
+    const building=x.BUILDING&&x.BUILDING!=="NIL"?x.BUILDING:"";
+    const blk=x.BLK_NO&&x.BLK_NO!=="NIL"?x.BLK_NO:"";
+    const street=oneMapTitle([blk&&building?`Block ${blk}`:blk,x.ROAD_NAME].filter(Boolean).join(" "));
+    const postal=x.POSTAL&&x.POSTAL!=="NIL"?`Singapore ${x.POSTAL}`:"";
+    return {type:"place",code:building?oneMapTitle(building):street||oneMapTitle(x.SEARCHVAL),
+      name:[building?street:"",postal].filter(Boolean).join(", ")||"Singapore",
+      kind:"",lat,lng,distance:distanceM(center,{lat,lng})};
+  }).filter(p=>p.lat>1&&p.lat<2&&p.lng>103&&p.lng<105);
+}
+
+// Places whose name has every word typed come first (nearest first), then
+// the rest; the same place from two sources is shown once.
+function mergePlaceResults(q,lists){
+  const norm=s=>String(s||"").toLowerCase().replace(/[^a-z0-9 ]/g," ");
+  const words=norm(q).split(/\s+/).filter(Boolean);
+  const out=[];
+  for(const p of lists.flat()){
+    if(out.some(o=>norm(o.code).trim()===norm(p.code).trim()&&distanceM(o,p)<80)) continue;
+    out.push(p);
+  }
+  const named=p=>words.every(w=>norm(`${p.code} ${p.name}`).includes(w))?0:1;
+  return out.sort((a,b)=>named(a)-named(b)||a.distance-b.distance);
+}
+
+// `onPartial` gets OneMap's results early when the other source is slower.
+async function searchPlacesInArea(query,bounds,center,{min=8,onPartial=null}={}){
   const q=String(query||"").trim();
   if(q.length<2) return [];
+  let done=false;
+  const official=q.length>=3?searchPlacesOneMap(q,center).catch(err=>{ console.warn("OneMap search failed",err); return []; }):Promise.resolve([]);
+  official.then(rows=>{ if(!done&&rows.length) onPartial?.(mergePlaceResults(q,[rows])); });
+  let rows=null;
   if(applePlaceSearch){
-    try{ return await searchPlacesApple(q,bounds,center,min); }
+    try{ rows=await searchPlacesApple(q,bounds,center,min); }
     catch(err){ console.warn("Apple Maps search failed",err); }
   }
+  if(!rows) rows=await searchPlacesOSM(q,bounds,center,{min});
+  const merged=mergePlaceResults(q,[rows,await official]);
+  done=true;
+  return merged;
+}
+
+// OpenStreetMap (Nominatim) search, for browsers.
+async function searchPlacesOSM(q,bounds,center,{min=8}={}){
   // Nominatim asks for at most one request a second.
   const run=async(viewbox,bounded)=>{
     const key=`${q.toLowerCase()}|${viewbox}|${bounded}`;
