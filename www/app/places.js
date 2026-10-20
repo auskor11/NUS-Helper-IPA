@@ -262,13 +262,21 @@ function transitLabel(leg){
 // Transitous. Both return the same shape.
 // Why the last search did or didn't use OneMap, shown under the routes.
 let oneMapStatus="";
+// Every route from both planners, merged: the same buses in the same order
+// count once (keeping the earlier arrival). Sorting is up to the caller.
 async function loadTransitRoutes(from,to){
-  try{
-    const its=await loadOneMapRoutes(from,to);
-    if(its?.length){ oneMapStatus="ok"; return its; }
-    if(its) oneMapStatus="OneMap found no routes";
-  }catch(err){ oneMapStatus=`OneMap error: ${err.message||err}`; console.warn("OneMap routing failed, using Transitous",err); }
-  return loadTransitousRoutes(from,to);
+  const [om,tr]=await Promise.all([
+    loadOneMapRoutes(from,to).then(its=>{ oneMapStatus=its==null?oneMapStatus:its.length?"ok":"OneMap found no routes"; return its||[]; })
+      .catch(err=>{ oneMapStatus=`OneMap error: ${err.message||err}`; console.warn("OneMap routing failed",err); return []; }),
+    loadTransitousRoutes(from,to).catch(err=>{ console.warn("Transitous routing failed",err); return []; })
+  ]);
+  const byKey=new Map();
+  for(const it of [...om,...tr]){
+    const key=it.legs.filter(l=>l.mode!=="WALK").map(l=>`${l.line}@${l.from.code||l.from.name}`).join(">");
+    const prev=byKey.get(key);
+    if(!prev||it.end<prev.end) byKey.set(key,it);
+  }
+  return [...byKey.values()].sort((a,b)=>a.end-b.end);
 }
 
 let oneMapToken=null, oneMapTokenProblem="";
@@ -292,7 +300,14 @@ async function loadOneMapRoutes(from,to){
   const c=n=>(+n).toFixed(6);
   const params=[`start=${c(from.lat)},${c(from.lng)}`,`end=${c(to.lat)},${c(to.lng)}`,"routeType=pt","mode=TRANSIT",
     `date=${p2(now.getMonth()+1)}-${p2(now.getDate())}-${now.getFullYear()}`,`time=${p2(now.getHours())}:${p2(now.getMinutes())}:00`,
-    "maxWalkDistance=1000","numItineraries=3"].join("&");
+    "maxWalkDistance=1000"].join("&");
+  // Ask for as many routes as OneMap gives; fall back to its documented 3.
+  try{ return await oneMapRequest(`${params}&numItineraries=8`,token,from,to); }
+  catch(err){ console.warn("OneMap with 8 routes failed, retrying with 3",err); }
+  return oneMapRequest(`${params}&numItineraries=3`,token,from,to);
+}
+
+async function oneMapRequest(params,token,from,to){
   const url=`https://www.onemap.gov.sg/api/public/routingsvc/route?${params}`;
   // In the iOS app go native (no CORS); in browsers OneMap allows CORS.
   const http=window.Capacitor?.Plugins?.CapacitorHttp;
@@ -325,11 +340,11 @@ async function loadOneMapRoutes(from,to){
     const key=it.legs.filter(l=>l.mode!=="WALK").map(l=>l.line).join(">");
     if(seen.has(key)) return false;
     seen.add(key); return true;
-  }).sort((a,b)=>a.end-b.end).slice(0,4);
+  }).sort((a,b)=>a.end-b.end);
 }
 
 async function loadTransitousRoutes(from,to){
-  const params=new URLSearchParams({fromPlace:`${from.lat},${from.lng}`,toPlace:`${to.lat},${to.lng}`,time:new Date().toISOString(),numItineraries:"5"});
+  const params=new URLSearchParams({fromPlace:`${from.lat},${from.lng}`,toPlace:`${to.lat},${to.lng}`,time:new Date().toISOString(),numItineraries:"8"});
   const data=await getJSON(`https://api.transitous.org/api/v5/plan?${params}`);
   // MRT station names come in capitals ("KENT RIDGE"); show them as "Kent Ridge".
   const tidy=n=>n===n.toUpperCase()?n.toLowerCase().replace(/\b[a-z]/g,c=>c.toUpperCase()):n;
@@ -344,14 +359,14 @@ async function loadTransitousRoutes(from,to){
       stopList:l.mode==="WALK"?[]:[l.from,...(l.intermediateStops||[]),l.to].map(p=>({name:tidy(p.name),lat:p.lat,lng:p.lon,time:Date.parse(p.arrival||p.departure||"")||null})),
       path:l.legGeometry?.points?decodePolyline(l.legGeometry.points,l.legGeometry.precision||6):[]
     }));
-    return {duration:it.duration,start:new Date(it.startTime),end:new Date(it.endTime),transfers:it.transfers,
+    return {duration:it.duration,start:new Date(it.startTime),end:new Date(it.endTime),transfers:it.transfers,source:"Transitous",
       walk:legs.filter(l=>l.mode==="WALK").reduce((n,l)=>n+l.distance,0),legs};
   }).filter(it=>{
     if(!it.legs.some(l=>l.mode!=="WALK")) return false;
     const key=it.legs.filter(l=>l.mode!=="WALK").map(l=>l.line).join(">");
     if(seen.has(key)) return false;
     seen.add(key); return true;
-  }).sort((a,b)=>a.end-b.end).slice(0,4);
+  }).sort((a,b)=>a.end-b.end);
 }
 
 function stepText(s){
@@ -422,7 +437,7 @@ async function planShuttleTrips(from,to){
   // Best option per service.
   const best=new Map();
   for(const o of options.sort((x,y)=>x.score-y.score)) if(!best.has(o.ride.service)) best.set(o.ride.service,o);
-  const picked=[...best.values()].slice(0,4);
+  const picked=[...best.values()].slice(0,8);
   if(!picked.length) return [];
 
   const live=new Map();

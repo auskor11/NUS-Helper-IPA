@@ -445,10 +445,22 @@ views.map=(()=>{
     }
 
     function setTab(m,text){ const t=$(`#modeTabs [data-mode="${m}"] small`,el); if(t) t.textContent=text; }
-    function transitTrips(){ return [...(transit.shuttle||[]),...(transit.public||[])].sort((a,b)=>a.end-b.end); }
+    // Route order: Arrive earliest, Shortest trip, Least walking or Fewest
+    // transfers; the choice is remembered.
+    const SORTS={arrive:"Arrive earliest",duration:"Shortest trip",walk:"Least walking",transfers:"Fewest transfers"};
+    let sortBy=(()=>{ try{ const v=localStorage.getItem("nus_route_sort"); return SORTS[v]?v:"arrive"; }catch{ return "arrive"; } })();
+    const ridesOf=it=>it.legs.filter(l=>l.mode!=="WALK").length;
+    const SORT_FNS={
+      arrive:(a,b)=>a.end-b.end,
+      walk:(a,b)=>a.walk-b.walk||a.end-b.end,
+      transfers:(a,b)=>ridesOf(a)-ridesOf(b)||a.end-b.end,
+      duration:(a,b)=>a.duration-b.duration||a.end-b.end
+    };
+    function transitTrips(){ return [...(transit.shuttle||[]),...(transit.public||[])].sort(SORT_FNS[sortBy]); }
     function onTransit(){
       const trips=transitTrips(), done=transit.shuttle!=null&&transit.public!=null;
       setTab("transit",trips.length?`${walkMinutes(Math.min(...trips.map(t=>t.duration)))} min`:done?"–":"…");
+      // Keep the list where it is while more routes arrive.
       if(current==="transit" && view==="list") renderTransitList();
     }
 
@@ -525,17 +537,20 @@ views.map=(()=>{
         bindFooter(); clearRoute(); return;
       }
       if(its[0]) peek(`Transit · ${walkMinutes(its[0].duration)} min · arrive ${clockTime(its[0].end)}`);
-      $("#routeBody",el).innerHTML=`${its.map((it,i)=>`
+      $("#routeBody",el).innerHTML=`<div class="route-sort">${Object.entries(SORTS).map(([k,l])=>`<button class="chip ${sortBy===k?"on":""}" data-sort="${k}">${l}</button>`).join("")}</div>
+        ${its.length?`<p class="route-count">${its.length} route${its.length===1?"":"s"}</p>`:""}
+        ${its.map((it,i)=>`
         <button class="route-card" data-i="${i}">
           <div class="route-card-top"><b>${walkMinutes(it.duration)} min</b>${it.shuttle?`<span class="pill live">Live</span>`:`<span>${clockTime(it.start)} – ${clockTime(it.end)}</span>`}</div>
           <div class="route-legs">${legChips(it)}</div>
-          <small>${it.shuttle?`NUS shuttle · ${esc(liveText(it))}`:`${it.transfers?`${it.transfers} transfer${it.transfers===1?"":"s"} · `:""}${distanceLabel(it.walk)} walking`}</small>
+          <small>${it.shuttle?`NUS shuttle · ${esc(liveText(it))}`:`${ridesOf(it)>1?`${ridesOf(it)-1} transfer${ridesOf(it)===2?"":"s"} · `:"No transfers · "}${distanceLabel(it.walk)} walking${it.source?` · ${esc(it.source)}`:""}`}</small>
         </button>`).join("")}
         ${loading?`<div class="empty-inline"><span class="spinner sm"></span>${its.length?"Looking for more routes…":"Finding shuttle, bus and MRT routes…"}</div>`:""}
-        <p class="small-help">NUS shuttle times are live. Bus and MRT routes are from ${its.some(t=>t.source==="OneMap")?"OneMap (LTA)":`LTA timetables via Transitous${oneMapStatus&&oneMapStatus!=="ok"?` (${esc(oneMapStatus)})`:""}`}; the first bus in a route shows its live arrival. Prefer a different route? Open it and tap Save as commute.</p>
+        <p class="small-help">NUS shuttle times are live. Bus and MRT routes are from ${its.some(t=>t.source==="OneMap")?"OneMap (LTA) and Transitous":`LTA timetables via Transitous${oneMapStatus&&oneMapStatus!=="ok"?` (${esc(oneMapStatus)})`:""}`}; the first bus in a route shows its live arrival. Prefer a different route? Open it and tap Save as commute.</p>
         ${footer()}`;
       bindFooter();
       $$(".route-card[data-i]",el).forEach(b=>b.onclick=()=>renderTransitDetail(its[+b.dataset.i]));
+      $$("[data-sort]",el).forEach(b=>b.onclick=()=>{ sortBy=b.dataset.sort; try{ localStorage.setItem("nus_route_sort",sortBy); }catch{} renderTransitList(); });
       if(its[0]) drawTransit(its[0]);
     }
 

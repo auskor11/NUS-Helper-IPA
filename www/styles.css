@@ -730,3 +730,8 @@ body.sheet-open{overflow:hidden}
 .commute-main small{font-size:12.5px;color:var(--muted)}
 .commute-row>svg{color:var(--muted);flex-shrink:0}
 #commuteSummary{flex-direction:column;align-items:flex-start;gap:2px}
+.route-sort{display:flex;gap:6px;overflow-x:auto;padding:2px 0 8px;scrollbar-width:none}
+.route-sort::-webkit-scrollbar{display:none}
+.route-sort .chip{flex-shrink:0;padding:6px 11px;font-size:12.5px}
+.route-sort .chip.on{background:var(--accent);border-color:var(--accent);color:#fff}
+.route-count{margin:0 2px 6px;font-size:12px;color:var(--muted)}
