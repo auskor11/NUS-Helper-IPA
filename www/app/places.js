@@ -260,41 +260,50 @@ function transitLabel(leg){
 // Public transport routes: OneMap (Singapore Land Authority, LTA data) when
 // its token is available (see push-server/refresh-onemap-token.mjs), else
 // Transitous. Both return the same shape.
+// Why the last search did or didn't use OneMap, shown under the routes.
+let oneMapStatus="";
 async function loadTransitRoutes(from,to){
   try{
     const its=await loadOneMapRoutes(from,to);
-    if(its?.length) return its;
-  }catch(err){ console.warn("OneMap routing failed, using Transitous",err); }
+    if(its?.length){ oneMapStatus="ok"; return its; }
+    if(its) oneMapStatus="OneMap found no routes";
+  }catch(err){ oneMapStatus=`OneMap error: ${err.message||err}`; console.warn("OneMap routing failed, using Transitous",err); }
   return loadTransitousRoutes(from,to);
 }
 
-let oneMapToken=null;
+let oneMapToken=null, oneMapTokenProblem="";
 async function getOneMapToken(){
   if(oneMapToken && oneMapToken.expiresAt>Date.now()+60000) return oneMapToken.token;
   const uid=window.nusFirebase?.user?.uid;
-  const doc=uid?await Promise.resolve(window.nusFirebase?.readDoc?.(`users/${uid}/private/onemap`)).catch(()=>null):null;
+  let doc=null;
+  try{ doc=uid?await window.nusFirebase.readDoc(`users/${uid}/private/onemap`):null; oneMapTokenProblem=doc?"":"no OneMap token saved for this account yet"; }
+  catch(err){ oneMapTokenProblem=`couldn't read the OneMap token (${err.code||err.message||err})`; }
+  if(doc?.token && !(doc.expiresAt>Date.now()+60000)) oneMapTokenProblem="the OneMap token has expired";
   oneMapToken=doc?.token && doc.expiresAt>Date.now()+60000 ? doc : null;
   return oneMapToken?.token||null;
 }
 
 async function loadOneMapRoutes(from,to){
   const token=await getOneMapToken();
-  if(!token) return null;
+  if(!token){ oneMapStatus=oneMapTokenProblem||"OneMap isn't set up"; return null; }
   const now=new Date(), p2=n=>String(n).padStart(2,"0");
-  const params=new URLSearchParams({start:`${from.lat},${from.lng}`,end:`${to.lat},${to.lng}`,routeType:"pt",mode:"TRANSIT",
-    date:`${p2(now.getMonth()+1)}-${p2(now.getDate())}-${now.getFullYear()}`,time:`${p2(now.getHours())}:${p2(now.getMinutes())}:00`,
-    maxWalkDistance:"1000",numItineraries:"4"});
+  // Plain commas and colons, as in OneMap's examples: the native HTTP layer
+  // re-encodes the URL, so pre-encoded %2C / %3A would arrive mangled.
+  const c=n=>(+n).toFixed(6);
+  const params=[`start=${c(from.lat)},${c(from.lng)}`,`end=${c(to.lat)},${c(to.lng)}`,"routeType=pt","mode=TRANSIT",
+    `date=${p2(now.getMonth()+1)}-${p2(now.getDate())}-${now.getFullYear()}`,`time=${p2(now.getHours())}:${p2(now.getMinutes())}:00`,
+    "maxWalkDistance=1000","numItineraries=3"].join("&");
   const url=`https://www.onemap.gov.sg/api/public/routingsvc/route?${params}`;
   // In the iOS app go native (no CORS); in browsers OneMap allows CORS.
   const http=window.Capacitor?.Plugins?.CapacitorHttp;
   let data;
   if(isNativeApp()&&http){
     const r=await http.get({url,headers:{Authorization:token},connectTimeout:12000,readTimeout:12000});
-    if(r.status<200||r.status>=300) throw new Error(`OneMap ${r.status}`);
+    if(r.status<200||r.status>=300) throw new Error(`OneMap ${r.status}${r.data?`: ${String(typeof r.data==="string"?r.data:JSON.stringify(r.data)).slice(0,120)}`:""}`);
     data=typeof r.data==="string"?JSON.parse(r.data):r.data;
   }else{
     const r=await fetch(url,{headers:{Authorization:token}});
-    if(!r.ok) throw new Error(`OneMap ${r.status}`);
+    if(!r.ok) throw new Error(`OneMap ${r.status}: ${(await r.text().catch(()=>"")).slice(0,120)}`);
     data=await r.json();
   }
   const tidy=n=>String(n||"").replace(/\b([A-Z])([A-Z]+)\b/g,(m,a,b)=>a+b.toLowerCase());

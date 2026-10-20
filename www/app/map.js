@@ -532,7 +532,7 @@ views.map=(()=>{
           <small>${it.shuttle?`NUS shuttle · ${esc(liveText(it))}`:`${it.transfers?`${it.transfers} transfer${it.transfers===1?"":"s"} · `:""}${distanceLabel(it.walk)} walking`}</small>
         </button>`).join("")}
         ${loading?`<div class="empty-inline"><span class="spinner sm"></span>${its.length?"Looking for more routes…":"Finding shuttle, bus and MRT routes…"}</div>`:""}
-        <p class="small-help">NUS shuttle times are live. Bus and MRT routes are from ${its.some(t=>t.source==="OneMap")?"OneMap (LTA)":"LTA timetables via Transitous"}; the first bus in a route shows its live arrival. Prefer a different route? Open it and tap Save as commute.</p>
+        <p class="small-help">NUS shuttle times are live. Bus and MRT routes are from ${its.some(t=>t.source==="OneMap")?"OneMap (LTA)":`LTA timetables via Transitous${oneMapStatus&&oneMapStatus!=="ok"?` (${esc(oneMapStatus)})`:""}`}; the first bus in a route shows its live arrival. Prefer a different route? Open it and tap Save as commute.</p>
         ${footer()}`;
       bindFooter();
       $$(".route-card[data-i]",el).forEach(b=>b.onclick=()=>renderTransitDetail(its[+b.dataset.i]));
