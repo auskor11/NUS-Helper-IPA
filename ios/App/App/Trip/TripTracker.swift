@@ -164,7 +164,7 @@ final class TripTracker: NSObject, CLLocationManagerDelegate {
         locationManager.startUpdatingLocation()
 
         timer?.invalidate()
-        timer = Timer.scheduledTimer(withTimeInterval: 15, repeats: true) { [weak self] _ in self?.tick() }
+        timer = Timer.scheduledTimer(withTimeInterval: 10, repeats: true) { [weak self] _ in self?.tick() }
         refreshLive()
     }
 
@@ -396,7 +396,7 @@ final class TripTracker: NSObject, CLLocationManagerDelegate {
                 let when = liveNext ?? Date(timeIntervalSince1970: leg.start / 1000)
                 return .init(phase: "wait", icon: icon(for: leg), line: leg.line, lineColor: leg.color,
                              title: "Board \(serviceName(leg))", subtitle: "At \(leg.stops[0].name) · \(liveNext != nil ? "live" : "scheduled")",
-                             metric: formatMinutes(when.timeIntervalSince(now)), countdownTo: when,
+                             metric: when.timeIntervalSince(now) <= 30 ? "Arr" : formatMinutes(when.timeIntervalSince(now)), countdownTo: when,
                              stopsLeft: total, totalStops: total, eta: eta)
             }
             let left = max(0, total - progress)

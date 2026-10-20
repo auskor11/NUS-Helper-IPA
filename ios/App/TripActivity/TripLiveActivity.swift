@@ -83,21 +83,17 @@ struct LineBadge: View {
     }
 }
 
-/// Stops left while riding, a countdown while waiting, otherwise time left.
+/// Stops left while riding, minutes to the next bus while walking or
+/// waiting, otherwise distance left. Bus times are estimates, so they show
+/// whole minutes from the latest live data (the app updates them as the
+/// minute changes) instead of a seconds countdown.
 struct MetricView: View {
     let state: TripAttributes.ContentState
     let large: Bool
 
     var body: some View {
         Group {
-            if let target = state.countdownTo, target > .now, state.phase == "walk" || state.phase == "wait" {
-                Text(timerInterval: Date.now...target, countsDown: true)
-                    .monospacedDigit()
-                    .multilineTextAlignment(.trailing)
-                    .frame(maxWidth: large ? 70 : 44)
-            } else {
-                Text(state.metric).lineLimit(1)
-            }
+            Text(state.metric).lineLimit(1).monospacedDigit()
         }
         .font(large ? .title3.weight(.semibold) : .caption.weight(.semibold))
         .foregroundStyle(state.phase == "arrived" ? .green : .white)
