@@ -80,3 +80,20 @@ async function fillCommuteCard(el){
     catch{ slot.textContent="Live times unavailable"; }
   }
 }
+
+/* ---------- The trip in progress (iOS app) ---------- */
+// Saved on this device when a trip starts, so it can be reopened from the
+// Map, Today or the Dynamic Island after closing the route.
+//   {kind:"transit", name, commute:{...commute shape}, startedAt}
+//   {kind:"street", mode, dest:{type,code,name,lat,lng}, startedAt}
+function loadActiveTrip(){ try{ return JSON.parse(localStorage.getItem("nus_active_trip")||"null"); }catch{ return null; } }
+function saveActiveTrip(t){ try{ localStorage.setItem("nus_active_trip",JSON.stringify({...t,startedAt:Date.now()})); }catch{} window.dispatchEvent(new CustomEvent("nus-trip-changed")); }
+function clearActiveTrip(){ try{ localStorage.removeItem("nus_active_trip"); }catch{} window.dispatchEvent(new CustomEvent("nus-trip-changed")); }
+function activeTripName(t){ return t?.kind==="transit"?t.name:t?.dest?.code||t?.dest?.name||"your destination"; }
+
+// "Trip in progress" bar for Today.
+function tripBannerHTML(){
+  const t=loadActiveTrip();
+  if(!t) return "";
+  return `<button class="banner trip-banner" data-go="map" data-params='{"trip":"1"}'>${icon("M3 11l19-9-9 19-2-8-8-2z",18)}<span><b>Trip in progress</b> · to ${esc(activeTripName(t))}</span>${icon("M9 18l6-6-6-6",18)}</button>`;
+}

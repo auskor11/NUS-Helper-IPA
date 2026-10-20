@@ -50,7 +50,26 @@ views.map=(()=>{
     }catch(err){ toast(`Couldn't update the widget: ${err.message||err}`); }
   }
   let tripActive=false;
-  TripActivity?.addListener("tripEnded",()=>{ tripActive=false; $$("#tripBtn",el).forEach(b=>{ b.textContent="Start trip"; b.classList.replace("danger-soft","primary"); }); });
+  TripActivity?.addListener("tripEnded",()=>{ tripActive=false; clearActiveTrip(); $$("#tripBtn",el).forEach(b=>{ b.textContent="Start trip"; b.classList.replace("danger-soft","primary"); }); });
+  // After a restart, keep the saved trip only if the Live Activity is still running.
+  if(TripActivity) TripActivity.isActive().then(r=>{ tripActive=!!r?.active; if(!tripActive && loadActiveTrip()) clearActiveTrip(); }).catch(()=>{});
+  else if(loadActiveTrip()) clearActiveTrip();
+  window.addEventListener("nus-trip-changed",()=>renderTripBar());
+
+  function renderTripBar(){
+    const bar=$("#tripBar",el); if(!bar) return;
+    const t=loadActiveTrip();
+    bar.hidden=!t;
+    if(t) $("span",bar).innerHTML=`<b>Trip in progress</b> · to ${esc(activeTripName(t))}`;
+  }
+
+  // Reopen the trip that's running (from the trip bar, Today or the island).
+  function openActiveTrip(){
+    const t=loadActiveTrip();
+    if(!t){ toast("No trip in progress."); return; }
+    if(t.kind==="transit") openCommute(t.commute,{trip:true});
+    else showRoute(t.dest);
+  }
 
   /* ---------- Markers ---------- */
 
@@ -482,16 +501,17 @@ views.map=(()=>{
       return `${trip&&TripActivity?`<button class="btn ${tripActive?"danger-soft":"primary"} full" id="tripBtn">${tripActive?"End trip":"Start trip"}</button><p class="small-help trip-help">${trip==="transit"?"Follows you in the Dynamic Island and on the lock screen, and buzzes one stop before you get off.":"Shows distance and time left in the Dynamic Island and on the lock screen."}</p>`:""}
         <div class="two route-actions"><button class="btn secondary" id="routeRecenter">Show my location</button><button class="btn danger-soft" id="routeEnd">Close</button></div>`;
     }
-    function bindFooter(makePlan=null){
+    function bindFooter(makePlan=null,makeSaved=null){
       const tripBtn=$("#tripBtn",el);
       if(tripBtn && makePlan) tripBtn.onclick=async()=>{
         try{
           if(tripActive){
             await TripActivity.end();
-            tripActive=false; tripBtn.textContent="Start trip"; tripBtn.classList.replace("danger-soft","primary");
+            tripActive=false; clearActiveTrip(); tripBtn.textContent="Start trip"; tripBtn.classList.replace("danger-soft","primary");
             return;
           }
           await TripActivity.start({trip:JSON.stringify(makePlan())});
+          if(makeSaved) saveActiveTrip(makeSaved());
           tripActive=true; tripBtn.textContent="End trip"; tripBtn.classList.replace("primary","danger-soft");
           toast("Trip started. Check the Dynamic Island.");
           setCollapsed(true);
@@ -509,7 +529,7 @@ views.map=(()=>{
         <details class="route-steps"><summary>Step-by-step (${route.steps.length})</summary>
           <ol>${route.steps.map(st=>`<li>${stepIcon(st)}<span>${esc(st.text)}${st.type!=="arrive"?`<small>${distanceLabel(st.distance)}</small>`:""}</span></li>`).join("")}</ol>
         </details>${footer("street")}`;
-      bindFooter(()=>streetPlan(mode,route));
+      bindFooter(()=>streetPlan(mode,route),()=>({kind:"street",mode,dest:{type:dest.type,code:dest.code,name:dest.name,lat:dest.lat,lng:dest.lng,...(dest.type==="public"||dest.type==="nus"?{}:{})}}));
       const color={walk:"#6d5df5",cycle:"#0ea5e9",drive:"#f97316"}[mode];
       drawPath([
         L.polyline(route.path,{color:"#ffffff",weight:9,opacity:.9}),
@@ -595,7 +615,7 @@ views.map=(()=>{
         </ol>
         <button class="btn secondary full save-commute" id="saveCommute">${icon(PLACE_ICONS.star.path,16)}Save as commute</button>
         ${footer("transit")}`;
-      bindFooter(()=>transitPlan(it));
+      bindFooter(()=>transitPlan(it),()=>({kind:"transit",name:title,commute:commuteFromItinerary(it,{name:`To ${title}`,to:{name:title,lat:dest.lat,lng:dest.lng}})}));
       $("#saveCommute",el).onclick=()=>saveCommute(it,{name:title,lat:dest.lat,lng:dest.lng});
       $$("[data-pin-leg]",el).forEach(b=>b.onclick=()=>{
         const l=it.legs[+b.dataset.pinLeg];
@@ -660,14 +680,14 @@ views.map=(()=>{
     };
   }
 
-  async function openCommute(c){
+  async function openCommute(c,{trip=false}={}){
     clearInterval(refreshTimer);
     clearRoute();
     if(pinMarker){ pinMarker.remove(); pinMarker=null; }
     selected=c;
     hideResults();
     const rides=c.legs.filter(isRide);
-    openPanel(`<p class="kicker">COMMUTE</p><h2>${esc(c.name)}</h2>
+    openPanel(`<p class="kicker">${trip?"TRIP IN PROGRESS":"COMMUTE"}</p><h2>${esc(trip?`To ${c.to.name}`:c.name)}</h2>
       <div class="route-summary" id="commuteSummary"><span class="spinner sm"></span><span>Checking live times…</span></div>
       <ol class="itinerary">${c.legs.map((l,i)=>{
         if(!isRide(l)) return `<li class="it-walk"><span class="it-dot walk">${icon(MODE_ICONS.walk,14)}</span><div><b>Walk ${distanceLabel(l.distance)}</b><small>to ${esc(l.to.name)} · ${walkMinutes(l.duration)} min</small></div></li>`;
@@ -681,13 +701,18 @@ views.map=(()=>{
       }).join("")}
         <li class="it-end"><span class="it-dot end">${icon("M12 21s-7-6.2-7-11.5a7 7 0 0 1 14 0C19 14.8 12 21 12 21z",14)}</span><div><b>${esc(c.to.name)}</b></div></li>
       </ol>
-      <div class="two route-actions"><button class="btn secondary" id="commuteFresh">Plan fresh routes</button><button class="btn danger-soft" id="commuteDelete">Delete</button></div>`,{directions:true});
+      ${trip?`<button class="btn danger-soft full" id="tripEnd">End trip</button>`
+        :`<div class="two route-actions"><button class="btn secondary" id="commuteFresh">Plan fresh routes</button><button class="btn danger-soft" id="commuteDelete">Delete</button></div>`}`,{directions:true});
+    $("#tripEnd",el)?.addEventListener("click",async()=>{
+      try{ await TripActivity?.end(); }catch{}
+      tripActive=false; clearActiveTrip(); closePanel(); toast("Trip ended");
+    });
     $$("[data-pin-leg]",el).forEach(b=>b.onclick=()=>{
       const l=c.legs[+b.dataset.pinLeg];
       pinWidgetStop({code:l.from.code,name:l.from.name,lat:l.from.lat,lng:l.from.lng,nus:l.mode==="SHUTTLE"},b,{service:l.line,to:l.to.name});
     });
-    $("#commuteFresh",el).onclick=()=>showRoute({type:"place",code:c.to.name,name:"",lat:c.to.lat,lng:c.to.lng});
-    $("#commuteDelete",el).onclick=async()=>{
+    if(!trip) $("#commuteFresh",el).onclick=()=>showRoute({type:"place",code:c.to.name,name:"",lat:c.to.lat,lng:c.to.lng});
+    if(!trip) $("#commuteDelete",el).onclick=async()=>{
       if(!await confirmSheet(`Delete “${c.name}”?`,{confirm:"Delete"})) return;
       state.commutes=state.commutes.filter(x=>x.id!==c.id); save({immediate:true}); closePanel(); renderSaved();
     };
@@ -904,7 +929,9 @@ views.map=(()=>{
   /* ---------- Deep links ---------- */
 
   async function applyParams(params){
-    if(params.commute){
+    if(params.trip){
+      openActiveTrip();
+    }else if(params.commute){
       const c=(state.commutes||[]).find(x=>x.id===params.commute);
       if(c) openCommute(c); else toast("That commute was deleted.");
     }else if(params.stop){
@@ -932,6 +959,7 @@ views.map=(()=>{
           <button class="clear-btn" id="mapClear" hidden aria-label="Clear">${icon("M6 6l12 12M18 6 6 18",16)}</button>
         </div>
         <div id="mapResults" class="map-results" hidden></div>
+        <button class="trip-bar" id="tripBar" hidden>${icon("M3 11l19-9-9 19-2-8-8-2z",16)}<span></span>${icon("M9 18l6-6-6-6",16)}</button>
         <button class="chip solid search-area" id="searchArea" hidden>${icon("M21 12a9 9 0 1 1-3-6.7L21 8M21 3v5h-5",14)}Search this area</button>
         <div class="map-chips">
           <span id="savedChips" class="saved-chips"></span>
@@ -969,6 +997,8 @@ views.map=(()=>{
     $("#mapClear",el).onclick=()=>{ input.value=""; $("#mapClear",el).hidden=true; hideResults(); clearPins(); input.focus(); };
     $("#searchArea",el).onclick=()=>{ if(lastSearch){ $("#mapSearch",el).value=lastSearch.query; runSearch(lastSearch.query,{pins:true}); } };
     $("#chipNearby",el).onclick=showNearby;
+    $("#tripBar",el).onclick=openActiveTrip;
+    renderTripBar();
     $("#layersBtn",el).onclick=toggleLayersMenu;
     enablePanelDrag();
     $$("[data-stop]",el).forEach(b=>b.onclick=()=>selectStop(NUS_STOPS.find(s=>s.code===b.dataset.stop)));

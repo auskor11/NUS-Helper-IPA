@@ -18,6 +18,7 @@ struct TripLiveActivity: Widget {
             LockScreenTripView(state: context.state, destination: context.attributes.destination)
                 .activityBackgroundTint(Color.black.opacity(0.85))
                 .activitySystemActionForegroundColor(.white)
+                .widgetURL(tripURL)
         } dynamicIsland: { context in
             let s = context.state
             return DynamicIsland {
@@ -53,9 +54,13 @@ struct TripLiveActivity: Widget {
                 LineBadge(state: s, compact: true)
             }
             .keylineTint(Color(hex: s.lineColor))
+            .widgetURL(tripURL)
         }
     }
 }
+
+/// Tapping the island or lock screen card reopens the trip in the app.
+private let tripURL = URL(string: "nuscompanion://open/map?trip=1")
 
 /// Coloured service badge ("R2"), or the travel icon when walking/driving.
 struct LineBadge: View {

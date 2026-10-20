@@ -302,9 +302,11 @@ final class TripTracker: NSObject, CLLocationManagerDelegate {
             let secs = left / speed
             let icon = ["cycle": "bicycle", "drive": "car.fill"][plan.mode] ?? "figure.walk"
             let verb = ["cycle": "Cycle", "drive": "Drive"][plan.mode] ?? "Walk"
+            // Walking shows distance left; cycling and driving show time left.
+            let walking = plan.mode == "walk"
             return .init(phase: "street", icon: icon, line: "", lineColor: "#8b7cff",
-                         title: "\(verb) to \(plan.destination)", subtitle: "\(formatDistance(left)) left",
-                         metric: formatMinutes(secs), countdownTo: nil, stopsLeft: 0, totalStops: 0,
+                         title: "\(verb) to \(plan.destination)", subtitle: walking ? "About \(formatMinutes(secs))" : "\(formatDistance(left)) left",
+                         metric: walking ? formatDistance(left) : formatMinutes(secs), countdownTo: nil, stopsLeft: 0, totalStops: 0,
                          eta: now.addingTimeInterval(secs))
         }
 
@@ -331,18 +333,26 @@ final class TripTracker: NSObject, CLLocationManagerDelegate {
         // Walking between stops, or to the destination at the end.
         let distLeft = location.map { distance($0, leg.toLat, leg.toLng) * 1.2 } ?? leg.duration * Self.walkSpeed
         let isLast = legIndex == plan.legs.count - 1
-        var subtitle = "\(formatDistance(distLeft)) to go"
-        var countdown: Date?
-        if !isLast, let upcoming = upcomingTransit {
+        // Walking to catch a bus or shuttle: the island shows that service and
+        // a countdown to its next arrival (live when available). Any other
+        // walk shows the distance left.
+        if !isLast, let upcoming = upcomingTransit, upcoming.leg.mode == "BUS" || upcoming.leg.mode == "SHUTTLE" {
             let when = liveNext ?? Date(timeIntervalSince1970: upcoming.leg.start / 1000)
-            subtitle = "\(serviceName(upcoming.leg)) \(liveNext != nil ? "in" : "at") " +
-                (liveNext != nil ? formatMinutes(when.timeIntervalSince(now)) : timeString(when))
-            countdown = liveNext
+            let wait = when.timeIntervalSince(now)
+            return .init(phase: "walk", icon: "figure.walk", line: upcoming.leg.line, lineColor: upcoming.leg.color,
+                         title: "Walk to \(leg.toName)",
+                         subtitle: "\(formatDistance(distLeft)) to the stop · \(serviceName(upcoming.leg)) \(liveNext != nil ? "live" : "scheduled")",
+                         metric: wait <= 30 ? "Arr" : formatMinutes(wait), countdownTo: when,
+                         stopsLeft: 0, totalStops: 0, eta: eta)
+        }
+        var subtitle = isLast ? "To \(plan.destination)" : "To \(leg.toName)"
+        if !isLast, let upcoming = upcomingTransit {
+            subtitle += " · \(serviceName(upcoming.leg)) at \(timeString(Date(timeIntervalSince1970: upcoming.leg.start / 1000)))"
         }
         return .init(phase: "walk", icon: "figure.walk", line: "", lineColor: "#8b7cff",
                      title: isLast ? "Walk to \(plan.destination)" : "Walk to \(leg.toName)",
-                     subtitle: subtitle, metric: formatMinutes(distLeft / Self.walkSpeed),
-                     countdownTo: countdown, stopsLeft: 0, totalStops: 0, eta: eta)
+                     subtitle: subtitle, metric: formatDistance(distLeft),
+                     countdownTo: nil, stopsLeft: 0, totalStops: 0, eta: eta)
     }
 
     /// Scheduled arrival, shifted by how late or early the live bus is.

@@ -159,7 +159,10 @@
   // Widget taps open nuscompanion://open/<route>, e.g. open/map?stop=CLB.
   const openDeepLink=url=>{
     const m=String(url||"").match(/^nuscompanion:\/\/open\/(.+)$/);
-    if(m) location.hash=`#/${m[1]}`;
+    if(!m) return;
+    // Same link twice (e.g. tapping the Dynamic Island while on the trip)
+    // doesn't fire hashchange, so handle the route directly.
+    if(location.hash===`#/${m[1]}`) handleRoute(); else location.hash=`#/${m[1]}`;
   };
   cap.Plugins.App?.addListener("appUrlOpen",e=>openDeepLink(e.url));
   cap.Plugins.App?.getLaunchUrl().then(r=>openDeepLink(r?.url)).catch(()=>{});

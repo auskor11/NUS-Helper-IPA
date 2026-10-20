@@ -735,3 +735,7 @@ body.sheet-open{overflow:hidden}
 .route-sort .chip{flex-shrink:0;padding:6px 11px;font-size:12.5px}
 .route-sort .chip.on{background:var(--accent);border-color:var(--accent);color:#fff}
 .route-count{margin:0 2px 6px;font-size:12px;color:var(--muted)}
+.trip-bar{display:flex;align-items:center;gap:8px;width:100%;margin-top:8px;padding:10px 14px;border-radius:14px;background:var(--accent);color:#fff;font-size:14px;box-shadow:0 4px 14px rgba(0,0,0,.25);text-align:left}
+.trip-bar[hidden]{display:none}
+.trip-bar span{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.trip-banner{background:color-mix(in srgb,var(--accent) 14%,var(--surface));border-color:color-mix(in srgb,var(--accent) 45%,var(--line));color:var(--text)}
