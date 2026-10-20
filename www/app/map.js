@@ -218,8 +218,9 @@ views.map=(()=>{
         .on("click",()=>selectPlace(savedAsPlace(p))).addTo(savedLayer);
     }
     const chips=$("#savedChips",el);
-    if(chips) chips.innerHTML=(state.places||[]).map(p=>`<button class="chip solid saved-chip" data-saved="${esc(p.id)}">${icon((PLACE_ICONS[p.icon]||PLACE_ICONS.star).path,14)}${esc(p.name)}</button>`).join("");
+    if(chips) chips.innerHTML=commuteChipsHTML()+(state.places||[]).map(p=>`<button class="chip solid saved-chip" data-saved="${esc(p.id)}">${icon((PLACE_ICONS[p.icon]||PLACE_ICONS.star).path,14)}${esc(p.name)}</button>`).join("");
     $$("[data-saved]",el).forEach(b=>b.onclick=()=>{ const p=state.places.find(x=>x.id===b.dataset.saved); if(p) selectPlace(savedAsPlace(p)); });
+    $$("[data-commute]",el).forEach(b=>b.onclick=()=>{ const c=(state.commutes||[]).find(x=>x.id===b.dataset.commute); if(c) openCommute(c); });
   }
 
   const savedAsPlace=p=>({type:"saved",id:p.id,code:p.name,name:p.address||"",icon:p.icon,lat:p.lat,lng:p.lng});
@@ -531,7 +532,7 @@ views.map=(()=>{
           <small>${it.shuttle?`NUS shuttle · ${esc(liveText(it))}`:`${it.transfers?`${it.transfers} transfer${it.transfers===1?"":"s"} · `:""}${distanceLabel(it.walk)} walking`}</small>
         </button>`).join("")}
         ${loading?`<div class="empty-inline"><span class="spinner sm"></span>${its.length?"Looking for more routes…":"Finding shuttle, bus and MRT routes…"}</div>`:""}
-        <p class="small-help">NUS shuttle times are live. Bus and MRT times are from LTA timetables (via Transitous); the first bus in a route shows its live arrival.</p>
+        <p class="small-help">NUS shuttle times are live. Bus and MRT routes are from ${its.some(t=>t.source==="OneMap")?"OneMap (LTA)":"LTA timetables via Transitous"}; the first bus in a route shows its live arrival. Prefer a different route? Open it and tap Save as commute.</p>
         ${footer()}`;
       bindFooter();
       $$(".route-card[data-i]",el).forEach(b=>b.onclick=()=>renderTransitDetail(its[+b.dataset.i]));
@@ -576,8 +577,11 @@ views.map=(()=>{
           </div></li>`;
         }).join("")}
         <li class="it-end"><span class="it-dot end">${icon("M12 21s-7-6.2-7-11.5a7 7 0 0 1 14 0C19 14.8 12 21 12 21z",14)}</span><div><b>Arrive at ${esc(title)}</b><small>around ${clockTime(it.end)}</small></div></li>
-        </ol>${footer("transit")}`;
+        </ol>
+        <button class="btn secondary full save-commute" id="saveCommute">${icon(PLACE_ICONS.star.path,16)}Save as commute</button>
+        ${footer("transit")}`;
       bindFooter(()=>transitPlan(it));
+      $("#saveCommute",el).onclick=()=>saveCommute(it,{name:title,lat:dest.lat,lng:dest.lng});
       $$("[data-pin-leg]",el).forEach(b=>b.onclick=()=>{
         const l=it.legs[+b.dataset.pinLeg];
         pinWidgetStop({code:l.from.code,name:l.from.name,lat:l.from.lat,lng:l.from.lng,nus:l.mode==="SHUTTLE"},b,{service:l.line,to:l.to.name});
@@ -620,6 +624,84 @@ views.map=(()=>{
     }
 
     pick(straight>1000||distanceM(from,dest)>600?"transit":"walk");
+  }
+
+  /* ---------- Saved commutes (app/commutes.js) ---------- */
+
+  function saveCommute(it,to){
+    const suggested=(state.places||[]).find(p=>distanceM(p,to)<150)?.name||to.name;
+    openModal(`<h2>Save as commute</h2>
+      <p class="subtle">Keeps this exact route (${esc(it.legs.filter(isRide).map(l=>l.line||transitLabel(l)).join(" → "))}). Open it any time from the map or Today with live times.</p>
+      <form class="form" id="commuteForm">
+        <input class="input big" name="name" value="${esc(`To ${suggested}`)}" required>
+        <button class="btn primary full">Save commute</button>
+      </form>`);
+    $("#commuteForm").onsubmit=e=>{
+      e.preventDefault();
+      const c=commuteFromItinerary(it,{name:String(new FormData(e.target).get("name")).trim(),to});
+      state.commutes=[...(state.commutes||[]),c];
+      save({immediate:true}); closeModal(); renderSaved();
+      toast(`Saved “${c.name}”`);
+    };
+  }
+
+  async function openCommute(c){
+    clearInterval(refreshTimer);
+    clearRoute();
+    if(pinMarker){ pinMarker.remove(); pinMarker=null; }
+    selected=c;
+    hideResults();
+    const rides=c.legs.filter(isRide);
+    openPanel(`<p class="kicker">COMMUTE</p><h2>${esc(c.name)}</h2>
+      <div class="route-summary" id="commuteSummary"><span class="spinner sm"></span><span>Checking live times…</span></div>
+      <ol class="itinerary">${c.legs.map((l,i)=>{
+        if(!isRide(l)) return `<li class="it-walk"><span class="it-dot walk">${icon(MODE_ICONS.walk,14)}</span><div><b>Walk ${distanceLabel(l.distance)}</b><small>to ${esc(l.to.name)} · ${walkMinutes(l.duration)} min</small></div></li>`;
+        return `<li style="--c:${lineColor(l)}"><span class="it-dot">${icon(legIcon(l),14)}</span><div>
+          <b>${esc(transitLabel(l))}</b>${l.headsign?`<small>towards ${esc(l.headsign)}</small>`:""}
+          <small>Board at <b>${esc(l.from.name)}</b>${l.from.code&&l.mode==="BUS"?` (${esc(l.from.code)})`:""}</small>
+          ${l.mode==="BUS"||l.mode==="SHUTTLE"?`<div class="live-next" data-leg-live="${i}"><span class="spinner sm"></span>Live times…</div>`:""}
+          ${l.from.code?widgetButtonHTML(`data-pin-leg="${i}"`,l.from.code):""}
+          <small>${l.stops} stop${l.stops===1?"":"s"} · ${walkMinutes(l.duration)} min · get off at <b>${esc(l.to.name)}</b></small>
+        </div></li>`;
+      }).join("")}
+        <li class="it-end"><span class="it-dot end">${icon("M12 21s-7-6.2-7-11.5a7 7 0 0 1 14 0C19 14.8 12 21 12 21z",14)}</span><div><b>${esc(c.to.name)}</b></div></li>
+      </ol>
+      <div class="two route-actions"><button class="btn secondary" id="commuteFresh">Plan fresh routes</button><button class="btn danger-soft" id="commuteDelete">Delete</button></div>`,{directions:true});
+    $$("[data-pin-leg]",el).forEach(b=>b.onclick=()=>{
+      const l=c.legs[+b.dataset.pinLeg];
+      pinWidgetStop({code:l.from.code,name:l.from.name,lat:l.from.lat,lng:l.from.lng,nus:l.mode==="SHUTTLE"},b,{service:l.line,to:l.to.name});
+    });
+    $("#commuteFresh",el).onclick=()=>showRoute({type:"place",code:c.to.name,name:"",lat:c.to.lat,lng:c.to.lng});
+    $("#commuteDelete",el).onclick=async()=>{
+      if(!await confirmSheet(`Delete “${c.name}”?`,{confirm:"Delete"})) return;
+      state.commutes=state.commutes.filter(x=>x.id!==c.id); save({immediate:true}); closePanel(); renderSaved();
+    };
+    // Draw the saved route.
+    const layers=[];
+    for(const l of c.legs){
+      if(!l.path?.length) continue;
+      if(!isRide(l)) layers.push(L.polyline(l.path,{color:"#6d5df5",weight:4,dashArray:"1 8",lineCap:"round"}));
+      else layers.push(L.polyline(l.path,{color:"#ffffff",weight:9,opacity:.9}),L.polyline(l.path,{color:lineColor(l),weight:6}),
+        L.circleMarker([l.from.lat,l.from.lng],{radius:6,color:"#fff",weight:2,fillColor:lineColor(l),fillOpacity:1}));
+    }
+    if(layers.length) drawPath(layers);
+    const load=async()=>{
+      let pos=null;
+      try{ pos=await getPosition(); }catch{}
+      const live=await commuteLive(c,pos).catch(()=>null);
+      if(selected!==c) return;
+      const sum=$("#commuteSummary",el);
+      if(sum&&live) sum.innerHTML=`<b>${live.first&&live.catchable?.length?`${live.leaveIn<=0?"Leave now":`Leave in ${live.leaveIn} min`}`:"Live"}</b><span>${esc(commuteSummaryHTML(live))}</span>`;
+      for(const [i,l] of c.legs.entries()){
+        const box=$(`[data-leg-live="${i}"]`,el); if(!box) continue;
+        try{
+          const t=await legLiveTimes(l);
+          box.innerHTML=t?.length?`<span class="pill live">Live</span> ${esc(l.line)} in ${t.map(m=>m<=0?"Arr":m).join(", ")} min`:`No ${esc(l.line)} right now`;
+        }catch{ box.textContent="Live times unavailable"; }
+      }
+    };
+    load();
+    refreshTimer=setInterval(()=>{ if(selected===c && activeView==="map" && !document.hidden) load(); },30000);
   }
 
   async function selectStop(stop){
@@ -807,7 +889,10 @@ views.map=(()=>{
   /* ---------- Deep links ---------- */
 
   async function applyParams(params){
-    if(params.stop){
+    if(params.commute){
+      const c=(state.commutes||[]).find(x=>x.id===params.commute);
+      if(c) openCommute(c); else toast("That commute was deleted.");
+    }else if(params.stop){
       const code=String(params.stop);
       const stop=NUS_STOPS.find(s=>s.code===code) || (await loadPublicStops()).find(s=>s.code===code);
       if(stop) selectStop(stop);

@@ -25,6 +25,7 @@ const state = {
   places: [],   // saved map places, e.g. {id, name:"Home", icon:"home", lat, lng, address}
   archive: [],  // finished semesters (app/archive.js): {id, academicYear, semester, modules:[{code,name,units,grade,su}], lessons, syllabus}
   gpa: {suLimit:32},
+  commutes: [], // saved routes (app/commutes.js)
   syllabus: {modules:[]},   // weekly topics and assessments per module (app/syllabus.js)
   semester: {academicYear:ACADEMIC_YEAR, semester:SEMESTER}
 };
@@ -88,6 +89,7 @@ function resetState(){
   state.syllabus={modules:[]};
   state.archive=[];
   state.gpa={suLimit:32};
+  state.commutes=[];
   state.semester={academicYear:ACADEMIC_YEAR, semester:SEMESTER};
   lastRemoteCloudChangeAt=0;
 }
@@ -119,6 +121,7 @@ function startCloudSync(){
       if(remote.syllabus && Array.isArray(remote.syllabus.modules)) state.syllabus=remote.syllabus;
       if(Array.isArray(remote.archive)) state.archive=remote.archive;
       if(remote.gpa) state.gpa={suLimit:32,...remote.gpa};
+      if(Array.isArray(remote.commutes)) state.commutes=remote.commutes;
       if(remote.semester) state.semester=remote.semester;
     }
 

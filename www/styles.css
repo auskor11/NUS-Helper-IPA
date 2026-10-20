@@ -717,3 +717,16 @@ body.sheet-open{overflow:hidden}
 .remove-mod{margin:0 14px 10px;font-size:12.5px}
 .grade-select.pf{font-size:13px}
 .pf-tag{display:grid;place-items:center;border:1px dashed var(--line);border-radius:9px;padding:7px 0;font-size:11.5px;font-weight:700;color:var(--muted)}
+
+/* ---------- Saved commutes ---------- */
+.commute-chip{color:var(--accent)}
+.save-commute{margin:10px 0 4px}
+.commute-card{display:flex;flex-direction:column}
+.commute-row{display:flex;align-items:center;gap:10px;padding:10px 0;border-top:1px solid var(--line);text-align:left;width:100%}
+.commute-row:first-of-type{border-top:0}
+.commute-legs{display:flex;gap:4px;flex-shrink:0}
+.commute-main{display:flex;flex-direction:column;min-width:0;flex:1}
+.commute-main b{font-size:14.5px}
+.commute-main small{font-size:12.5px;color:var(--muted)}
+.commute-row>svg{color:var(--muted);flex-shrink:0}
+#commuteSummary{flex-direction:column;align-items:flex-start;gap:2px}

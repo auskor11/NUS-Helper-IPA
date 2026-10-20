@@ -257,7 +257,69 @@ function transitLabel(leg){
 // that uses LTA's timetables. Returns up to 4 itineraries:
 // {duration, start, end, transfers, walk (m), legs:[{mode, line, headsign,
 //  from:{name,code,lat,lng}, to:{...}, start, end, stops, distance, path}]}
+// Public transport routes: OneMap (Singapore Land Authority, LTA data) when
+// its token is available (see push-server/refresh-onemap-token.mjs), else
+// Transitous. Both return the same shape.
 async function loadTransitRoutes(from,to){
+  try{
+    const its=await loadOneMapRoutes(from,to);
+    if(its?.length) return its;
+  }catch(err){ console.warn("OneMap routing failed, using Transitous",err); }
+  return loadTransitousRoutes(from,to);
+}
+
+let oneMapToken=null;
+async function getOneMapToken(){
+  if(oneMapToken && oneMapToken.expiresAt>Date.now()+60000) return oneMapToken.token;
+  const uid=window.nusFirebase?.user?.uid;
+  const doc=uid?await Promise.resolve(window.nusFirebase?.readDoc?.(`users/${uid}/private/onemap`)).catch(()=>null):null;
+  oneMapToken=doc?.token && doc.expiresAt>Date.now()+60000 ? doc : null;
+  return oneMapToken?.token||null;
+}
+
+async function loadOneMapRoutes(from,to){
+  const token=await getOneMapToken();
+  if(!token) return null;
+  const now=new Date(), p2=n=>String(n).padStart(2,"0");
+  const params=new URLSearchParams({start:`${from.lat},${from.lng}`,end:`${to.lat},${to.lng}`,routeType:"pt",mode:"TRANSIT",
+    date:`${p2(now.getMonth()+1)}-${p2(now.getDate())}-${now.getFullYear()}`,time:`${p2(now.getHours())}:${p2(now.getMinutes())}:00`,
+    maxWalkDistance:"1000",numItineraries:"4"});
+  const url=`https://www.onemap.gov.sg/api/public/routingsvc/route?${params}`;
+  // In the iOS app go native (no CORS); in browsers OneMap allows CORS.
+  const http=window.Capacitor?.Plugins?.CapacitorHttp;
+  let data;
+  if(isNativeApp()&&http){
+    const r=await http.get({url,headers:{Authorization:token},connectTimeout:12000,readTimeout:12000});
+    if(r.status<200||r.status>=300) throw new Error(`OneMap ${r.status}`);
+    data=typeof r.data==="string"?JSON.parse(r.data):r.data;
+  }else{
+    const r=await fetch(url,{headers:{Authorization:token}});
+    if(!r.ok) throw new Error(`OneMap ${r.status}`);
+    data=await r.json();
+  }
+  const tidy=n=>String(n||"").replace(/\b([A-Z])([A-Z]+)\b/g,(m,a,b)=>a+b.toLowerCase());
+  const place=p=>({name:p.name==="Origin"?"your location":p.name==="Destination"?"your destination":tidy(p.name),code:p.stopCode||"",lat:+p.lat,lng:+p.lon});
+  const modeOf=m=>m==="SUBWAY"||m==="RAIL"?"SUBWAY":m;
+  const seen=new Set();
+  return (data?.plan?.itineraries||[]).map(it=>{
+    const legs=(it.legs||[]).map(l=>({
+      mode:modeOf(l.mode), line:String(l.route||l.routeShortName||""), headsign:tidy(l.headsign||""),
+      from:place(l.from), to:place(l.to), start:new Date(l.startTime), end:new Date(l.endTime),
+      stops:(l.intermediateStops||[]).length+1, distance:l.distance||0, duration:l.duration||((l.endTime-l.startTime)/1000),
+      stopList:l.mode==="WALK"?[]:[l.from,...(l.intermediateStops||[]),l.to].map(p=>({name:tidy(p.name),lat:+p.lat,lng:+p.lon,time:p.arrival||p.departure||null})),
+      path:l.legGeometry?.points?decodePolyline(l.legGeometry.points,5):[]
+    }));
+    return {duration:it.duration,start:new Date(it.startTime),end:new Date(it.endTime),transfers:it.transfers||0,
+      walk:legs.filter(l=>l.mode==="WALK").reduce((n,l)=>n+l.distance,0),legs,source:"OneMap"};
+  }).filter(it=>{
+    if(!it.legs.some(l=>l.mode!=="WALK")) return false;
+    const key=it.legs.filter(l=>l.mode!=="WALK").map(l=>l.line).join(">");
+    if(seen.has(key)) return false;
+    seen.add(key); return true;
+  }).sort((a,b)=>a.end-b.end).slice(0,4);
+}
+
+async function loadTransitousRoutes(from,to){
   const params=new URLSearchParams({fromPlace:`${from.lat},${from.lng}`,toPlace:`${to.lat},${to.lng}`,time:new Date().toISOString(),numItineraries:"5"});
   const data=await getJSON(`https://api.transitous.org/api/v5/plan?${params}`);
   // MRT station names come in capitals ("KENT RIDGE"); show them as "Kent Ridge".

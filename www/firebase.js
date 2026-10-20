@@ -16,6 +16,7 @@
     async signOut(){throw new Error("Firebase is not configured.");},
     async saveState(){throw new Error("Firebase is not configured.");},
     async loadState(){return null;},
+    async readDoc(){return null;},
     async savePushSubscription(){throw new Error("Firebase is not configured.");},
     async removePushSubscription(){throw new Error("Firebase is not configured.");},
     startStateSync(){return ()=>{};}
@@ -156,10 +157,16 @@
             syllabus:snapshot.syllabus||{modules:[]},
             archive:snapshot.archive||[],
             gpa:snapshot.gpa||{suLimit:32},
+            commutes:snapshot.commutes||[],
             semester:snapshot.semester||{},
             clientUpdatedAt:Date.now(),
             updatedAt:window.firebase.firestore.FieldValue.serverTimestamp()
           },{merge:true});
+        },
+        // A document the GitHub Action writes, such as users/{uid}/private/onemap.
+        async readDoc(path){
+          const snap=await db.doc(path).get();
+          return snap.exists?snap.data():null;
         },
         async loadState(){
           if(!api.user)return null;
