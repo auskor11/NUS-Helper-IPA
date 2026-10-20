@@ -68,9 +68,28 @@ final class TripTracker: NSObject, CLLocationManagerDelegate {
     /// running, and on the next launch `restore()` picks it back up.
     private struct Saved: Codable { let plan: TripPlan; let startedAt: Date; let legIndex: Int }
 
+    /// Written straight to a file (not UserDefaults, which saves lazily and
+    /// can be lost if the app is swiped away right after a trip starts).
+    private static var savedURL: URL {
+        let dir = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        return dir.appendingPathComponent("active-trip.json")
+    }
+
     private func persist() {
         guard let plan, let data = try? JSONEncoder().encode(Saved(plan: plan, startedAt: startedAt, legIndex: legIndex)) else { return }
-        UserDefaults.standard.set(data, forKey: Self.savedKey)
+        try? data.write(to: Self.savedURL, options: .atomic)
+    }
+
+    private static func clearSaved() {
+        try? FileManager.default.removeItem(at: savedURL)
+        UserDefaults.standard.removeObject(forKey: savedKey)
+    }
+
+    /// Destination of a trip still showing in the Dynamic Island, even if its
+    /// plan couldn't be restored.
+    var runningDestination: String? {
+        activity?.attributes.destination ?? Activity<TripAttributes>.activities.first?.attributes.destination
     }
 
     /// Called at launch. Re-attaches to a trip's Live Activity left running
@@ -79,11 +98,16 @@ final class TripTracker: NSObject, CLLocationManagerDelegate {
     func restore() {
         guard plan == nil else { return }
         let running = Activity<TripAttributes>.activities
-        guard let data = UserDefaults.standard.data(forKey: Self.savedKey),
-              let saved = try? JSONDecoder().decode(Saved.self, from: data),
-              let current = running.first,
-              Date().timeIntervalSince(saved.startedAt) < Self.maxTripLength else {
-            UserDefaults.standard.removeObject(forKey: Self.savedKey)
+        guard let current = running.first else { Self.clearSaved(); return }
+        let data = (try? Data(contentsOf: Self.savedURL)) ?? UserDefaults.standard.data(forKey: Self.savedKey)
+        guard let data, let saved = try? JSONDecoder().decode(Saved.self, from: data) else {
+            // The island is still up but the plan is gone: leave it showing so
+            // the app can offer to end it, rather than silently removing it.
+            log.info("Trip activity running without a saved plan")
+            return
+        }
+        guard Date().timeIntervalSince(saved.startedAt) < Self.maxTripLength else {
+            Self.clearSaved()
             for a in running { Task { await a.end(nil, dismissalPolicy: .immediate) } }
             return
         }
@@ -145,7 +169,12 @@ final class TripTracker: NSObject, CLLocationManagerDelegate {
     }
 
     func finish(arrived: Bool) {
-        guard plan != nil else { return }
+        guard plan != nil else {
+            // An island left from a trip that couldn't be restored.
+            for a in Activity<TripAttributes>.activities { Task { await a.end(nil, dismissalPolicy: .immediate) } }
+            Self.clearSaved()
+            return
+        }
         log.info("Trip ended (arrived: \(arrived))")
         timer?.invalidate(); timer = nil
         locationManager.stopUpdatingLocation()
@@ -159,7 +188,7 @@ final class TripTracker: NSObject, CLLocationManagerDelegate {
         }
         activity = nil
         plan = nil
-        UserDefaults.standard.removeObject(forKey: Self.savedKey)
+        Self.clearSaved()
         onEnd?()
     }
 

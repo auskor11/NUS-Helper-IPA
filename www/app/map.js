@@ -54,12 +54,20 @@ views.map=(()=>{
   // After a restart, keep the saved trip only if the Live Activity is still running.
   // The native tracker resumes a trip that outlived the app being closed; if
   // this device lost its copy of the trip, rebuild it from the native plan.
-  if(TripActivity) TripActivity.isActive().then(r=>{
+  // Resolves once the native side has said whether a trip is running, so a
+  // Dynamic Island tap at launch doesn't decide too early.
+  const tripChecked=!TripActivity?Promise.resolve():TripActivity.isActive().then(r=>{
     tripActive=!!r?.active;
     if(!tripActive){ if(loadActiveTrip()) clearActiveTrip(); return; }
-    if(!loadActiveTrip() && r.plan){ try{ saveActiveTrip(tripFromNativePlan(JSON.parse(r.plan))); }catch(err){ console.warn("Couldn't rebuild the trip",err); } }
+    const saved=loadActiveTrip();
+    if(r.plan){
+      // The native plan is the source of truth for the trip that's running.
+      try{ if(!saved||saved.native) saveActiveTrip({...tripFromNativePlan(JSON.parse(r.plan)),native:true}); }catch(err){ console.warn("Couldn't rebuild the trip",err); }
+    }else if(!saved){
+      saveActiveTrip({kind:"orphan",name:r.destination||"your destination"});
+    }
     renderTripBar();
-  }).catch(()=>{});
+  }).catch(err=>console.warn("Trip check failed",err));
 
   function tripFromNativePlan(plan){
     const last=plan.legs.at(-1);
@@ -71,7 +79,9 @@ views.map=(()=>{
       const from=first?{name:first.name,code:l.code||"",lat:first.lat,lng:first.lng}:prev||{name:"your location",code:"",lat:l.path?.[0]?.[0],lng:l.path?.[0]?.[1]};
       const to={name:l.toName,code:"",lat:l.toLat,lng:l.toLng};
       prev=to;
-      return {mode:l.mode,line:l.line||"",headsign:"",from,to,stops:Math.max(1,(l.stops?.length||1)-1),duration:l.duration||0,distance:0,
+      const pts=l.path?.length?l.path:[];
+      const dist=pts.slice(1).reduce((n,p,i)=>n+distanceM({lat:pts[i][0],lng:pts[i][1]},{lat:p[0],lng:p[1]}),0)||(l.duration||0)*1.3;
+      return {mode:l.mode,line:l.line||"",headsign:"",from,to,stops:Math.max(1,(l.stops?.length||1)-1),duration:l.duration||0,distance:dist,
         path:l.path?.length?l.path:(l.stops||[]).map(x=>[x.lat,x.lng])};
     });
     return {kind:"transit",name:plan.destination,commute:{id:"trip",name:`To ${plan.destination}`,to:{name:plan.destination,lat:last.toLat,lng:last.toLng},legs}};
@@ -87,11 +97,24 @@ views.map=(()=>{
   }
 
   // Reopen the trip that's running (from the trip bar, Today or the island).
-  function openActiveTrip(){
+  async function openActiveTrip(){
+    await tripChecked;
     const t=loadActiveTrip();
     if(!t){ toast("No trip in progress."); return; }
     if(t.kind==="transit") openCommute(t.commute,{trip:true});
+    else if(t.kind==="orphan") openOrphanTrip(t);
     else showRoute(t.dest,{mode:t.mode});
+  }
+
+  // The island is still up but the trip's details were lost.
+  function openOrphanTrip(t){
+    clearInterval(refreshTimer); clearRoute();
+    selected=t;
+    openPanel(`<p class="kicker">TRIP IN PROGRESS</p><h2>To ${esc(t.name)}</h2>
+      <p class="subtle">The route details for this trip weren't saved, so they can't be shown. The Dynamic Island keeps following it.</p>
+      <div class="two route-actions"><button class="btn secondary" id="orphanRoute">Plan again</button><button class="btn danger-soft" id="tripEnd">End trip</button></div>`);
+    $("#tripEnd",el).onclick=async()=>{ try{ await TripActivity?.end(); }catch{} tripActive=false; clearActiveTrip(); closePanel(); toast("Trip ended"); };
+    $("#orphanRoute",el).onclick=()=>{ $("#mapSearch",el).value=t.name; $("#mapSearch",el).dispatchEvent(new Event("input")); closePanel(); };
   }
 
   /* ---------- Markers ---------- */

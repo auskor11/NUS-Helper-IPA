@@ -59,8 +59,10 @@ public class TripActivityPlugin: CAPPlugin, CAPBridgedPlugin {
         DispatchQueue.main.async {
             if #available(iOS 16.2, *) {
                 TripTracker.shared.restore()
-                var result: [String: Any] = ["active": TripTracker.shared.isActive]
+                let dest = TripTracker.shared.runningDestination
+                var result: [String: Any] = ["active": TripTracker.shared.isActive || dest != nil]
                 if let plan = TripTracker.shared.planJSON { result["plan"] = plan }
+                if let dest { result["destination"] = dest }
                 call.resolve(result)
             }
             else { call.resolve(["active": false]) }

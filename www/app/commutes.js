@@ -87,9 +87,9 @@ async function fillCommuteCard(el){
 //   {kind:"transit", name, commute:{...commute shape}, startedAt}
 //   {kind:"street", mode, dest:{type,code,name,lat,lng}, startedAt}
 function loadActiveTrip(){ try{ return JSON.parse(localStorage.getItem("nus_active_trip")||"null"); }catch{ return null; } }
-function saveActiveTrip(t){ try{ localStorage.setItem("nus_active_trip",JSON.stringify({...t,startedAt:Date.now()})); }catch{} window.dispatchEvent(new CustomEvent("nus-trip-changed")); }
+function saveActiveTrip(t){ try{ localStorage.setItem("nus_active_trip",JSON.stringify({...t,startedAt:Date.now()})); }catch{} window.dispatchEvent(new CustomEvent("nus-trip-changed")); if(activeView==="today") views.today?.refresh?.(); }
 function clearActiveTrip(){ try{ localStorage.removeItem("nus_active_trip"); }catch{} window.dispatchEvent(new CustomEvent("nus-trip-changed")); }
-function activeTripName(t){ return t?.kind==="transit"?t.name:t?.dest?.code||t?.dest?.name||"your destination"; }
+function activeTripName(t){ return t?.kind==="transit"||t?.kind==="orphan"?t.name:t?.dest?.code||t?.dest?.name||"your destination"; }
 
 // "Trip in progress" bar for Today.
 function tripBannerHTML(){
