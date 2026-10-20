@@ -62,6 +62,47 @@ final class TripTracker: NSObject, CLLocationManagerDelegate {
     private var startedAt = Date()
 
     private static let maxTripLength: TimeInterval = 2 * 60 * 60
+    private static let savedKey = "trip.active.v1"
+
+    /// Saved so a trip survives the app being closed: the Live Activity keeps
+    /// running, and on the next launch `restore()` picks it back up.
+    private struct Saved: Codable { let plan: TripPlan; let startedAt: Date; let legIndex: Int }
+
+    private func persist() {
+        guard let plan, let data = try? JSONEncoder().encode(Saved(plan: plan, startedAt: startedAt, legIndex: legIndex)) else { return }
+        UserDefaults.standard.set(data, forKey: Self.savedKey)
+    }
+
+    /// Called at launch. Re-attaches to a trip's Live Activity left running
+    /// when the app was closed, and resumes tracking it; ends any activity
+    /// that can't be resumed.
+    func restore() {
+        guard plan == nil else { return }
+        let running = Activity<TripAttributes>.activities
+        guard let data = UserDefaults.standard.data(forKey: Self.savedKey),
+              let saved = try? JSONDecoder().decode(Saved.self, from: data),
+              let current = running.first,
+              Date().timeIntervalSince(saved.startedAt) < Self.maxTripLength else {
+            UserDefaults.standard.removeObject(forKey: Self.savedKey)
+            for a in running { Task { await a.end(nil, dismissalPolicy: .immediate) } }
+            return
+        }
+        for a in running.dropFirst() { Task { await a.end(nil, dismissalPolicy: .immediate) } }
+        plan = saved.plan
+        activity = current
+        startedAt = saved.startedAt
+        legIndex = min(saved.legIndex, saved.plan.legs.count - 1)
+        progress = 0; boarded = false; alertedLeg = -1; pathIndex = 0
+        liveNext = nil; liveFetchedAt = .distantPast; lastPushed = current.content.state; lastPushAt = .distantPast
+        log.info("Trip restored to \(saved.plan.destination, privacy: .public) at leg \(self.legIndex)")
+        startTracking()
+    }
+
+    /// The trip plan as JSON, for the app to redraw the trip after a restart.
+    var planJSON: String? {
+        guard let plan, let data = try? JSONEncoder().encode(plan) else { return nil }
+        return String(data: data, encoding: .utf8)
+    }
     private static let walkSpeed = 1.3 // m/s
 
     // MARK: Start / end
@@ -83,7 +124,11 @@ final class TripTracker: NSObject, CLLocationManagerDelegate {
         lastPushed = state
         lastPushAt = Date()
         log.info("Trip started to \(newPlan.destination, privacy: .public) with \(newPlan.legs.count) legs")
+        persist()
+        startTracking()
+    }
 
+    private func startTracking() {
         locationManager.delegate = self
         locationManager.desiredAccuracy = kCLLocationAccuracyBest
         locationManager.distanceFilter = 8
@@ -114,6 +159,7 @@ final class TripTracker: NSObject, CLLocationManagerDelegate {
         }
         activity = nil
         plan = nil
+        UserDefaults.standard.removeObject(forKey: Self.savedKey)
         onEnd?()
     }
 
@@ -199,6 +245,7 @@ final class TripTracker: NSObject, CLLocationManagerDelegate {
         progress = 0; boarded = false; pathIndex = 0
         liveNext = nil; liveFetchedAt = .distantPast
         if let plan, legIndex >= plan.legs.count { finish(arrived: true); return }
+        persist()
         refreshLive()
     }
 

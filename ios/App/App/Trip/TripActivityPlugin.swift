@@ -17,6 +17,16 @@ public class TripActivityPlugin: CAPPlugin, CAPBridgedPlugin {
         CAPPluginMethod(name: "isActive", returnType: CAPPluginReturnPromise)
     ]
 
+    public override func load() {
+        // Resume a trip whose Live Activity outlived the app being closed.
+        if #available(iOS 16.2, *) {
+            DispatchQueue.main.async {
+                TripTracker.shared.onEnd = { [weak self] in self?.notifyListeners("tripEnded", data: [:]) }
+                TripTracker.shared.restore()
+            }
+        }
+    }
+
     @objc func start(_ call: CAPPluginCall) {
         guard #available(iOS 16.2, *) else {
             call.reject("Live Activities need iOS 16.2 or later.")
@@ -47,7 +57,12 @@ public class TripActivityPlugin: CAPPlugin, CAPBridgedPlugin {
 
     @objc func isActive(_ call: CAPPluginCall) {
         DispatchQueue.main.async {
-            if #available(iOS 16.2, *) { call.resolve(["active": TripTracker.shared.isActive]) }
+            if #available(iOS 16.2, *) {
+                TripTracker.shared.restore()
+                var result: [String: Any] = ["active": TripTracker.shared.isActive]
+                if let plan = TripTracker.shared.planJSON { result["plan"] = plan }
+                call.resolve(result)
+            }
             else { call.resolve(["active": false]) }
         }
     }

@@ -52,8 +52,31 @@ views.map=(()=>{
   let tripActive=false;
   TripActivity?.addListener("tripEnded",()=>{ tripActive=false; clearActiveTrip(); $$("#tripBtn",el).forEach(b=>{ b.textContent="Start trip"; b.classList.replace("danger-soft","primary"); }); });
   // After a restart, keep the saved trip only if the Live Activity is still running.
-  if(TripActivity) TripActivity.isActive().then(r=>{ tripActive=!!r?.active; if(!tripActive && loadActiveTrip()) clearActiveTrip(); }).catch(()=>{});
-  else if(loadActiveTrip()) clearActiveTrip();
+  // The native tracker resumes a trip that outlived the app being closed; if
+  // this device lost its copy of the trip, rebuild it from the native plan.
+  if(TripActivity) TripActivity.isActive().then(r=>{
+    tripActive=!!r?.active;
+    if(!tripActive){ if(loadActiveTrip()) clearActiveTrip(); return; }
+    if(!loadActiveTrip() && r.plan){ try{ saveActiveTrip(tripFromNativePlan(JSON.parse(r.plan))); }catch(err){ console.warn("Couldn't rebuild the trip",err); } }
+    renderTripBar();
+  }).catch(()=>{});
+
+  function tripFromNativePlan(plan){
+    const last=plan.legs.at(-1);
+    const dest={type:"place",code:plan.destination,name:"",lat:last.toLat,lng:last.toLng};
+    if(plan.mode!=="transit") return {kind:"street",mode:plan.mode,dest};
+    let prev=null;
+    const legs=plan.legs.map(l=>{
+      const first=l.stops?.[0];
+      const from=first?{name:first.name,code:l.code||"",lat:first.lat,lng:first.lng}:prev||{name:"your location",code:"",lat:l.path?.[0]?.[0],lng:l.path?.[0]?.[1]};
+      const to={name:l.toName,code:"",lat:l.toLat,lng:l.toLng};
+      prev=to;
+      return {mode:l.mode,line:l.line||"",headsign:"",from,to,stops:Math.max(1,(l.stops?.length||1)-1),duration:l.duration||0,distance:0,
+        path:l.path?.length?l.path:(l.stops||[]).map(x=>[x.lat,x.lng])};
+    });
+    return {kind:"transit",name:plan.destination,commute:{id:"trip",name:`To ${plan.destination}`,to:{name:plan.destination,lat:last.toLat,lng:last.toLng},legs}};
+  }
+  if(!TripActivity && loadActiveTrip()) clearActiveTrip();
   window.addEventListener("nus-trip-changed",()=>renderTripBar());
 
   function renderTripBar(){
