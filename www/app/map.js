@@ -50,6 +50,10 @@ views.map=(()=>{
     }catch(err){ toast(`Couldn't update the widget: ${err.message||err}`); }
   }
   let tripActive=false;
+  // Set while choosing a new route for a trip that's running (missed bus):
+  // the route's button then switches the trip instead of ending it.
+  let rerouting=false;
+  TripActivity?.addListener("tripBehind",info=>{ if($("#tripBehind",el)) showBehind(info); });
   TripActivity?.addListener("tripEnded",()=>{ tripActive=false; clearActiveTrip(); $$("#tripBtn",el).forEach(b=>{ b.textContent="Start trip"; b.classList.replace("danger-soft","primary"); }); });
   // After a restart, keep the saved trip only if the Live Activity is still running.
   // The native tracker resumes a trip that outlived the app being closed; if
@@ -536,6 +540,8 @@ views.map=(()=>{
     clearInterval(refreshTimer);
     clearRoute();
     selected=dest; // also when reopened from a trip, not via selectPlace
+    // Re-planning a running trip (missed bus): its button switches the trip over.
+    let switching=rerouting; rerouting=false;
     const back=()=>dest.type==="nus"||dest.type==="public"?selectStop(dest):selectPlace(dest);
     const title=dest.type==="public"||dest.type==="nus"?dest.name:dest.code;
     openPanel(`<p class="kicker">DIRECTIONS</p><h2>${esc(title)}</h2>
@@ -580,7 +586,11 @@ views.map=(()=>{
       transfers:(a,b)=>ridesOf(a)-ridesOf(b)||a.end-b.end,
       duration:(a,b)=>a.duration-b.duration||a.end-b.end
     };
-    function transitTrips(){ return [...(transit.shuttle||[]),...(transit.public||[])].sort(SORT_FNS[sortBy]); }
+    // Routes using a disrupted MRT line go last, marked.
+    let alerts=null;
+    loadTrainAlerts().then(a=>{ alerts=a; if(a?.disrupted&&current==="transit"&&view==="list") renderTransitList(); });
+    const hit=it=>disruptedLines(it.legs,alerts).length?1:0;
+    function transitTrips(){ return [...(transit.shuttle||[]),...(transit.public||[])].sort((a,b)=>hit(a)-hit(b)||SORT_FNS[sortBy](a,b)); }
     function onTransit(){
       const trips=transitTrips(), done=transit.shuttle!=null&&transit.public!=null;
       setTab("transit",trips.length?`${walkMinutes(Math.min(...trips.map(t=>t.duration)))} min`:done?"–":"…");
@@ -604,22 +614,24 @@ views.map=(()=>{
     }
 
     function footer(trip=false){
-      return `${trip&&TripActivity?`<button class="btn ${tripActive?"danger-soft":"primary"} full" id="tripBtn">${tripActive?"End trip":"Start trip"}</button><p class="small-help trip-help">${trip==="transit"?"Follows you in the Dynamic Island and on the lock screen, and buzzes one stop before you get off.":"Shows distance and time left in the Dynamic Island and on the lock screen."}</p>`:""}
+      const ending=tripActive&&!switching;
+      return `${trip&&TripActivity?`<button class="btn ${ending?"danger-soft":"primary"} full" id="tripBtn">${ending?"End trip":switching?"Switch to this route":"Start trip"}</button><p class="small-help trip-help">${trip==="transit"?"Follows you in the Dynamic Island and on the lock screen, and buzzes one stop before you get off.":"Shows distance and time left in the Dynamic Island and on the lock screen."}</p>`:""}
         <div class="two route-actions"><button class="btn secondary" id="routeRecenter">Show my location</button><button class="btn danger-soft" id="routeEnd">Close</button></div>`;
     }
     function bindFooter(makePlan=null,makeSaved=null){
       const tripBtn=$("#tripBtn",el);
       if(tripBtn && makePlan) tripBtn.onclick=async()=>{
         try{
-          if(tripActive){
+          if(tripActive&&!switching){
             await TripActivity.end();
             tripActive=false; clearActiveTrip(); tripBtn.textContent="Start trip"; tripBtn.classList.replace("danger-soft","primary");
             return;
           }
           await TripActivity.start({trip:JSON.stringify(makePlan())});
           if(makeSaved) saveActiveTrip(makeSaved());
+          const switched=switching; switching=false;
           tripActive=true; tripBtn.textContent="End trip"; tripBtn.classList.replace("primary","danger-soft");
-          toast("Trip started. Check the Dynamic Island.");
+          toast(switched?"Switched to the new route.":"Trip started. Check the Dynamic Island.");
           setCollapsed(true);
         }catch(err){ toast(err.message||"Couldn't start the trip."); }
       };
@@ -663,12 +675,13 @@ views.map=(()=>{
         bindFooter(); clearRoute(); return;
       }
       if(its[0]) peek(`Transit · ${walkMinutes(its[0].duration)} min · arrive ${clockTime(its[0].end)}`);
-      setRouteBody(`<div class="route-sort">${Object.entries(SORTS).map(([k,l])=>`<button class="chip ${sortBy===k?"on":""}" data-sort="${k}">${l}</button>`).join("")}</div>
+      setRouteBody(`${its.some(hit)?trainAlertBannerHTML(alerts,{compact:true}):""}<div class="route-sort">${Object.entries(SORTS).map(([k,l])=>`<button class="chip ${sortBy===k?"on":""}" data-sort="${k}">${l}</button>`).join("")}</div>
         ${its.length?`<p class="route-count">${its.length} route${its.length===1?"":"s"}</p>`:""}
         ${its.map((it,i)=>`
         <button class="route-card" data-i="${i}">
           <div class="route-card-top"><b>${walkMinutes(it.duration)} min</b>${it.shuttle?`<span class="pill live">Live</span>`:`<span>${clockTime(it.start)} – ${clockTime(it.end)}</span>`}</div>
           <div class="route-legs">${legChips(it)}</div>
+          ${hit(it)?`<small class="route-warn">${icon("M12 9v4M12 17h.01M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z",13)}Uses the ${esc(disruptedLines(it.legs,alerts).map(l=>LINE_NAMES[l]||`${l} line`).join(", "))}, which is disrupted</small>`:""}
           <small>${it.shuttle?`NUS shuttle · ${esc(liveText(it))}`:`${ridesOf(it)>1?`${ridesOf(it)-1} transfer${ridesOf(it)===2?"":"s"} · `:"No transfers · "}${distanceLabel(it.walk)} walking${it.source?` · ${esc(it.source)}`:""}`}</small>
         </button>`).join("")}
         ${loading?`<div class="empty-inline"><span class="spinner sm"></span>${its.length?"Looking for more routes…":"Finding shuttle, bus and MRT routes…"}</div>`:""}
@@ -706,6 +719,7 @@ views.map=(()=>{
       peek(`${first?transitLabel(first):"Transit"} · ${walkMinutes(it.duration)} min · arrive ${clockTime(it.end)}`);
       setRouteBody(`
         <button class="link" id="routeOptions">‹ All routes</button>
+        ${hit(it)?trainAlertBannerHTML(alerts):""}
         <div class="route-summary"><b>${walkMinutes(it.duration)} min</b><span>arrive around ${clockTime(it.end)}</span></div>
         <ol class="itinerary">${it.legs.map((l,i)=>{
           if(l.mode==="WALK") return l.distance<20?"":`<li class="it-walk"><span class="it-dot walk">${icon(MODE_ICONS.walk,14)}</span><div><b>Walk ${distanceLabel(l.distance)}</b><small>to ${esc(l.to.name)} · ${walkMinutes(l.duration)} min</small></div></li>`;
@@ -798,6 +812,7 @@ views.map=(()=>{
     const rides=c.legs.filter(isRide);
     openPanel(`<p class="kicker">${trip?"TRIP IN PROGRESS":"COMMUTE"}</p><h2>${esc(trip?`To ${c.to.name}`:c.name)}</h2>
       <div class="route-summary" id="commuteSummary"><span class="spinner sm"></span><span>Checking live times…</span></div>
+      <div id="commuteMrt"></div>
       <ol class="itinerary">${c.legs.map((l,i)=>{
         if(!isRide(l)) return `<li class="it-walk"><span class="it-dot walk">${icon(MODE_ICONS.walk,14)}</span><div><b>Walk ${distanceLabel(l.distance)}</b><small>to ${esc(l.to.name)} · ${walkMinutes(l.duration)} min</small></div></li>`;
         return `<li style="--c:${lineColor(l)}"><span class="it-dot">${icon(legIcon(l),14)}</span><div>
@@ -810,7 +825,7 @@ views.map=(()=>{
       }).join("")}
         <li class="it-end"><span class="it-dot end">${icon("M12 21s-7-6.2-7-11.5a7 7 0 0 1 14 0C19 14.8 12 21 12 21z",14)}</span><div><b>${esc(c.to.name)}</b></div></li>
       </ol>
-      ${trip?`<button class="btn danger-soft full" id="tripEnd">End trip</button>`
+      ${trip?`<div id="tripBehind"></div><button class="btn danger-soft full" id="tripEnd">End trip</button>`
         :`<div class="two route-actions"><button class="btn secondary" id="commuteFresh">Plan fresh routes</button><button class="btn danger-soft" id="commuteDelete">Delete</button></div>`}`,{directions:true});
     $("#tripEnd",el)?.addEventListener("click",async()=>{
       try{ await TripActivity?.end(); }catch{}
@@ -850,7 +865,27 @@ views.map=(()=>{
       }
     };
     load();
+    loadTrainAlerts().then(a=>{
+      const box=$("#commuteMrt",el);
+      if(box&&selected===c&&disruptedLines(c.legs,a).length) morphPanel(()=>{ box.innerHTML=trainAlertBannerHTML(a)+(trip?"":`<p class="small-help">Tap Plan fresh routes for a way around it.</p>`); });
+    });
+    if(trip) TripActivity?.isActive().then(r=>{ if(selected===c&&r?.behind) showBehind(r.behind); }).catch(()=>{});
     refreshTimer=setInterval(()=>{ if(selected===c && activeView==="map" && !document.hidden) load(); },30000);
+  }
+
+  // Missed bus or connection (from the native tracker): wait for the next
+  // one, or plan again from here and switch the trip to the new route.
+  function showBehind(b){
+    const box=$("#tripBehind",el), c=selected;
+    if(!box||!c?.to) return;
+    const mins=Math.max(0,Math.round((b.next-Date.now())/60000));
+    morphPanel(()=>{ box.innerHTML=`<div class="behind-card">
+      <b>${icon("M12 9v4M12 17h.01M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z",16)}Missed the ${clockTime(new Date(b.was))} ${esc(b.service)}?</b>
+      <p>The next one is at ${clockTime(new Date(b.next))} (in ${mins} min). The Dynamic Island is already following it.</p>
+      <div class="two"><button class="btn primary" id="behindReroute">Find another route</button><button class="btn secondary" id="behindWait">Keep waiting</button></div>
+    </div>`; },box,"fade");
+    $("#behindWait",el).onclick=()=>morphPanel(()=>{ box.innerHTML=""; });
+    $("#behindReroute",el).onclick=()=>{ rerouting=true; showRoute({type:"place",code:c.to.name,name:"",lat:c.to.lat,lng:c.to.lng}); };
   }
 
   async function selectStop(stop){

@@ -43,7 +43,23 @@ final class TripTracker: NSObject, CLLocationManagerDelegate {
     static let shared = TripTracker()
 
     var onEnd: (() -> Void)?
+    /// Called when the bus the user was heading for has gone (or is running
+    /// well late), so the app can offer other routes.
+    var onBehind: (([String: Any]) -> Void)?
     var isActive: Bool { plan != nil }
+
+    /// The user is behind plan for an upcoming ride: the bus they were
+    /// heading for (`was`) can't be caught any more, the next is at `next`.
+    struct Behind { let leg: Int; let line: String; let service: String; let was: Date; let next: Date }
+    private(set) var behind: Behind?
+    /// First live arrival seen for each ride: the bus the user is aiming for.
+    private var baseline: [Int: Date] = [:]
+
+    var behindInfo: [String: Any]? {
+        guard let behind else { return nil }
+        return ["leg": behind.leg, "line": behind.line, "service": behind.service,
+                "was": behind.was.timeIntervalSince1970 * 1000, "next": behind.next.timeIntervalSince1970 * 1000]
+    }
 
     private let locationManager = CLLocationManager()
     private var plan: TripPlan?
@@ -116,7 +132,7 @@ final class TripTracker: NSObject, CLLocationManagerDelegate {
         activity = current
         startedAt = saved.startedAt
         legIndex = min(saved.legIndex, saved.plan.legs.count - 1)
-        progress = 0; boarded = false; alertedLeg = -1; pathIndex = 0
+        progress = 0; boarded = false; alertedLeg = -1; pathIndex = 0; behind = nil; baseline = [:]
         liveNext = nil; liveFetchedAt = .distantPast; lastPushed = current.content.state; lastPushAt = .distantPast
         log.info("Trip restored to \(saved.plan.destination, privacy: .public) at leg \(self.legIndex)")
         startTracking()
@@ -137,7 +153,7 @@ final class TripTracker: NSObject, CLLocationManagerDelegate {
         guard !newPlan.legs.isEmpty else { throw TripError.empty }
 
         plan = newPlan
-        legIndex = 0; progress = 0; boarded = false; alertedLeg = -1; pathIndex = 0
+        legIndex = 0; progress = 0; boarded = false; alertedLeg = -1; pathIndex = 0; behind = nil; baseline = [:]
         liveNext = nil; liveFetchedAt = .distantPast; lastPushed = nil; startedAt = Date()
 
         let state = makeState()
@@ -242,6 +258,7 @@ final class TripTracker: NSObject, CLLocationManagerDelegate {
                 progress = max(progress, byTime)
             }
             if progress >= 1 { boarded = true }
+            if boarded, behind?.leg == legIndex { behind = nil }
 
             if boarded, progress >= stops.count - 2, alertedLeg != legIndex {
                 alertedLeg = legIndex
@@ -273,6 +290,7 @@ final class TripTracker: NSObject, CLLocationManagerDelegate {
         log.info("Now on leg \(self.legIndex)")
         progress = 0; boarded = false; pathIndex = 0
         liveNext = nil; liveFetchedAt = .distantPast
+        if let b = behind, b.leg < legIndex { behind = nil }
         if let plan, legIndex >= plan.legs.count { finish(arrived: true); return }
         persist()
         refreshLive()
@@ -292,11 +310,12 @@ final class TripTracker: NSObject, CLLocationManagerDelegate {
 
     // MARK: Live arrivals
 
-    /// The next transit leg the user hasn't boarded yet.
+    /// The next transit leg the user hasn't boarded yet (while riding, the
+    /// connection after this ride).
     private var upcomingTransit: (index: Int, leg: TripPlan.Leg)? {
-        guard let plan else { return nil }
+        guard let plan, legIndex < plan.legs.count else { return nil }
         for i in legIndex..<plan.legs.count where plan.legs[i].stops.count >= 2 {
-            if i == legIndex && boarded { return nil }
+            if i == legIndex && boarded { continue }
             return (i, plan.legs[i])
         }
         return nil
@@ -304,7 +323,7 @@ final class TripTracker: NSObject, CLLocationManagerDelegate {
 
     private func refreshLive() {
         liveFetchedAt = Date()
-        guard let (_, leg) = upcomingTransit, let code = leg.code, let kind = leg.liveKind else { return }
+        guard let (index, leg) = upcomingTransit, let code = leg.code, let kind = leg.liveKind else { return }
         let url: URL?
         if kind == "shuttle" {
             url = URL(string: "https://bus.hewliyang.com/api/stop/\(code)")
@@ -331,20 +350,59 @@ final class TripTracker: NSObject, CLLocationManagerDelegate {
                 }
             }
             DispatchQueue.main.async {
+                guard index == self.upcomingTransit?.index else { return }
                 // Catch the first bus the user can still reach.
-                let reachIn = self.walkSecondsToBoarding()
-                let next = minutes.sorted().first { $0 * 60 >= reachIn - 30 } ?? minutes.min()
-                self.liveNext = next.map { Date().addingTimeInterval(max(0, $0) * 60) }
+                let reachIn = self.secondsToBoarding(index)
+                let sorted = minutes.sorted()
+                let catchable = sorted.first { $0 * 60 >= reachIn - 30 }
+                self.liveNext = (catchable ?? sorted.first).map { Date().addingTimeInterval(max(0, $0) * 60) }
+                self.checkBehind(index: index, leg: leg, arrivals: sorted, reachIn: reachIn, catchable: catchable)
                 self.push(force: true)
             }
         }.resume()
     }
 
-    private func walkSecondsToBoarding() -> Double {
-        guard let plan, legIndex < plan.legs.count, let loc = location else { return 0 }
-        let leg = plan.legs[legIndex]
-        if leg.stops.count >= 2 { return 0 }
-        return distance(loc, leg.toLat, leg.toLng) / Self.walkSpeed
+    /// Seconds until the user can be at the boarding stop of leg `target`:
+    /// the rest of this walk (or ride), plus any walks in between.
+    private func secondsToBoarding(_ target: Int) -> Double {
+        guard let plan else { return 0 }
+        let nowMs = Date().timeIntervalSince1970 * 1000
+        var secs = 0.0
+        for i in legIndex..<min(target, plan.legs.count) {
+            let l = plan.legs[i]
+            if i == legIndex {
+                if l.stops.count >= 2 { secs += boarded ? max(0, (l.end - nowMs) / 1000) : l.duration }
+                else if let loc = location { secs += distance(loc, l.toLat, l.toLng) / Self.walkSpeed }
+                else { secs += l.duration }
+            } else { secs += l.duration }
+        }
+        return secs
+    }
+
+    /// Spots a missed bus (or connection): the bus the user was aiming for
+    /// can no longer be reached and the next one is 4+ minutes later.
+    private func checkBehind(index: Int, leg: TripPlan.Leg, arrivals: [Double], reachIn: Double, catchable: Double?) {
+        guard let c = catchable else { return }
+        let nextAt = Date().addingTimeInterval(c * 60)
+        guard let aim = baseline[index] else { baseline[index] = nextAt; return }
+        guard nextAt.timeIntervalSince(aim) >= 240 else { return }
+        let aimIn = aim.timeIntervalSinceNow
+        // It has come and gone, or it's still on the board but out of reach.
+        let lost = aimIn < 60 || arrivals.contains { abs($0 * 60 - aimIn) < 120 && $0 * 60 < reachIn - 30 }
+        guard lost else { return }
+        let b = Behind(leg: index, line: leg.line, service: serviceName(leg), was: aim, next: nextAt)
+        behind = b
+        baseline[index] = nextAt   // aim for the next one; a second miss alerts again
+        log.info("Behind plan: missed \(b.service, privacy: .public), next at \(self.timeString(nextAt), privacy: .public)")
+        if let info = behindInfo { onBehind?(info) }
+        AudioServicesPlaySystemSound(kSystemSoundID_Vibrate)
+        let state = makeState()
+        let alert = AlertConfiguration(title: "Missed the \(b.service)?",
+                                       body: "Next one at \(timeString(nextAt)). Open NUS Companion for other routes.",
+                                       sound: .named("silence.caf"))
+        Task { await activity?.update(.init(state: state, staleDate: nil), alertConfiguration: alert) }
+        lastPushed = state
+        lastPushAt = Date()
     }
 
     // MARK: State
@@ -394,16 +452,20 @@ final class TripTracker: NSObject, CLLocationManagerDelegate {
             let total = leg.stops.count - 1
             if !boarded {
                 let when = liveNext ?? Date(timeIntervalSince1970: leg.start / 1000)
+                let missed = behind?.leg == legIndex ? "Missed the \(timeString(behind!.was)) · next at \(timeString(when))" : nil
                 return .init(phase: "wait", icon: icon(for: leg), line: leg.line, lineColor: leg.color,
-                             title: "Board \(serviceName(leg))", subtitle: "At \(leg.stops[0].name) · \(liveNext != nil ? "live" : "scheduled")",
+                             title: "Board \(serviceName(leg))", subtitle: missed ?? "At \(leg.stops[0].name) · \(liveNext != nil ? "live" : "scheduled")",
                              metric: when.timeIntervalSince(now) <= 30 ? "Arr" : formatMinutes(when.timeIntervalSince(now)), countdownTo: when,
                              stopsLeft: total, totalStops: total, eta: eta)
             }
             let left = max(0, total - progress)
             let next = leg.stops[min(progress + 1, total)].name
+            // A connection that's been missed shows instead of the next stop.
+            var rideSub = left <= 1 ? "Your stop is next" : "Next stop: \(next)"
+            if let b = behind, b.leg > legIndex, left > 1 { rideSub = "Missed connection · next \(b.service) at \(timeString(liveNext ?? b.next))" }
             return .init(phase: "ride", icon: icon(for: leg), line: leg.line, lineColor: leg.color,
                          title: "Get off at \(leg.toName)",
-                         subtitle: left <= 1 ? "Your stop is next" : "Next stop: \(next)",
+                         subtitle: rideSub,
                          metric: left == 1 ? "1 stop" : "\(left) stops", countdownTo: nil,
                          stopsLeft: left, totalStops: total, eta: eta)
         }
@@ -419,7 +481,9 @@ final class TripTracker: NSObject, CLLocationManagerDelegate {
             let wait = when.timeIntervalSince(now)
             return .init(phase: "walk", icon: "figure.walk", line: upcoming.leg.line, lineColor: upcoming.leg.color,
                          title: "Walk to \(leg.toName)",
-                         subtitle: "\(formatDistance(distLeft)) to the stop · \(serviceName(upcoming.leg)) \(liveNext != nil ? "live" : "scheduled")",
+                         subtitle: behind?.leg == upcoming.index
+                            ? "Missed the \(timeString(behind!.was)) · next at \(timeString(when))"
+                            : "\(formatDistance(distLeft)) to the stop · \(serviceName(upcoming.leg)) \(liveNext != nil ? "live" : "scheduled")",
                          metric: wait <= 30 ? "Arr" : formatMinutes(wait), countdownTo: when,
                          stopsLeft: 0, totalStops: 0, eta: eta)
         }

@@ -5,8 +5,9 @@ import Foundation
 /// packageClassList, see scripts/patch-ios.mjs).
 ///   start({ trip: JSON string of TripPlan }) → starts the Live Activity
 ///   end()                                     → ends it
-///   isActive()                                → { active }
-/// Emits "tripEnded" when a trip finishes on its own (arrival or time limit).
+///   isActive()                                → { active, plan, destination, behind }
+/// Emits "tripEnded" when a trip finishes on its own (arrival or time limit),
+/// and "tripBehind" {leg, line, service, was, next} when a bus is missed.
 @objc(TripActivityPlugin)
 public class TripActivityPlugin: CAPPlugin, CAPBridgedPlugin {
     public let identifier = "TripActivityPlugin"
@@ -22,6 +23,7 @@ public class TripActivityPlugin: CAPPlugin, CAPBridgedPlugin {
         if #available(iOS 16.2, *) {
             DispatchQueue.main.async {
                 TripTracker.shared.onEnd = { [weak self] in self?.notifyListeners("tripEnded", data: [:]) }
+                TripTracker.shared.onBehind = { [weak self] info in self?.notifyListeners("tripBehind", data: info) }
                 TripTracker.shared.restore()
             }
         }
@@ -40,6 +42,7 @@ public class TripActivityPlugin: CAPPlugin, CAPBridgedPlugin {
             do {
                 let plan = try JSONDecoder().decode(TripPlan.self, from: data)
                 TripTracker.shared.onEnd = { [weak self] in self?.notifyListeners("tripEnded", data: [:]) }
+                TripTracker.shared.onBehind = { [weak self] info in self?.notifyListeners("tripBehind", data: info) }
                 try TripTracker.shared.start(plan)
                 call.resolve()
             } catch {
@@ -63,6 +66,7 @@ public class TripActivityPlugin: CAPPlugin, CAPBridgedPlugin {
                 var result: [String: Any] = ["active": TripTracker.shared.isActive || dest != nil]
                 if let plan = TripTracker.shared.planJSON { result["plan"] = plan }
                 if let dest { result["destination"] = dest }
+                if let behind = TripTracker.shared.behindInfo { result["behind"] = behind }
                 call.resolve(result)
             }
             else { call.resolve(["active": false]) }

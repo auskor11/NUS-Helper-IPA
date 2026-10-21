@@ -246,6 +246,71 @@ function lineColor(leg){
   return MRT_COLORS[leg.line] || "#748477"; // LRT and anything else
 }
 
+/* ---------- MRT / LRT service alerts ---------- */
+// LTA DataMall TrainServiceAlerts. The iOS app asks LTA directly with the key
+// the reminder job stores at users/{uid}/private/lta; browsers can't (LTA
+// blocks them), so the website reads the copy that job saves every few
+// minutes at users/{uid}/private/mrt. See push-server/send-reminders.mjs.
+const LTA_LINES={EWL:["EW"],NSL:["NS"],NEL:["NE"],CCL:["CC"],CEL:["CE"],CGL:["CG"],DTL:["DT"],TEL:["TE"],
+  BPL:["BP"],SLRT:["SK","SW","SE","STC"],PLRT:["PG","PE","PW","PTC"]};
+const LINE_NAMES={EW:"East-West Line",NS:"North-South Line",NE:"North East Line",CC:"Circle Line",CE:"Circle Line",
+  CG:"East-West Line (Changi Airport)",DT:"Downtown Line",TE:"Thomson-East Coast Line",BP:"Bukit Panjang LRT",
+  SK:"Sengkang LRT",SW:"Sengkang LRT",SE:"Sengkang LRT",PG:"Punggol LRT",PE:"Punggol LRT",PW:"Punggol LRT"};
+let trainAlertCache=null;
+
+function normaliseTrainAlerts(value,checkedAt){
+  const segs=(value?.AffectedSegments||[]).map(x=>({ltaLine:x.Line,lines:LTA_LINES[x.Line]||[String(x.Line||"").replace(/L$/,"")],
+    direction:x.Direction||"",stations:String(x.Stations||"").split(",").map(v=>v.trim()).filter(Boolean),
+    freeBus:x.FreePublicBus||"",shuttle:x.FreeMRTShuttle||""}));
+  const messages=(value?.Message||[]).map(m=>String(m.Content||"").trim()).filter(Boolean);
+  const disrupted=Number(value?.Status)===2||segs.length>0;
+  return {disrupted,segments:segs,lines:new Set(segs.flatMap(x=>x.lines)),messages,checkedAt:checkedAt||Date.now()};
+}
+
+async function loadTrainAlerts(){
+  if(trainAlertCache&&Date.now()-trainAlertCache.at<120000) return trainAlertCache.data;
+  const uid=window.nusFirebase?.user?.uid;
+  let data=null;
+  try{
+    if(isNativeApp()&&uid){
+      const lta=await window.nusFirebase.readDoc(`users/${uid}/private/lta`).catch(()=>null);
+      if(lta?.key){
+        const body=await getJSON("https://datamall2.mytransport.sg/ltaodataservice/TrainServiceAlerts",{native:true,timeout:8000,headers:{AccountKey:lta.key}});
+        data=normaliseTrainAlerts(body.value||{});
+      }
+    }
+    if(!data&&uid){
+      const doc=await window.nusFirebase.readDoc(`users/${uid}/private/mrt`);
+      // Ignore a copy more than an hour old (the job may have stopped).
+      if(doc?.value&&Date.now()-(doc.checkedAt||0)<3600000) data=normaliseTrainAlerts(doc.value,doc.checkedAt);
+    }
+  }catch(err){ console.warn("MRT alerts unavailable",err); }
+  trainAlertCache={at:Date.now(),data};
+  return data;
+}
+
+// MRT/LRT lines of a route that have a disruption right now.
+function disruptedLines(legs,alerts){
+  if(!alerts?.disrupted) return [];
+  return [...new Set(legs.filter(l=>l.mode!=="BUS"&&l.mode!=="SHUTTLE"&&l.mode!=="WALK"&&alerts.lines.has(l.line)).map(l=>l.line))];
+}
+
+function trainAlertText(alerts){
+  if(!alerts?.disrupted) return "";
+  const names=[...new Set(alerts.segments.map(x=>LINE_NAMES[x.lines[0]]||x.ltaLine))];
+  const seg=alerts.segments[0];
+  const where=seg?.stations.length?` (${seg.stations[0]}${seg.stations.length>1?` – ${seg.stations.at(-1)}`:""}${seg.direction?`, towards ${seg.direction}`:""})`:"";
+  return `${names.join(", ")||"MRT"} disrupted${where}.`;
+}
+
+function trainAlertBannerHTML(alerts,{compact=false}={}){
+  if(!alerts?.disrupted) return "";
+  const seg=alerts.segments[0];
+  const extra=[seg?.freeBus?`Free buses: ${seg.freeBus}`:"",seg?.shuttle?`Bridging shuttle: ${seg.shuttle}`:""].filter(Boolean).join(" · ");
+  return `<div class="banner mrt-banner">${icon("M12 9v4M12 17h.01M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z",18)}
+    <span><b>${esc(trainAlertText(alerts))}</b>${!compact&&alerts.messages[0]?`<small>${esc(alerts.messages[0])}</small>`:""}${!compact&&extra?`<small>${esc(extra)}</small>`:""}</span></div>`;
+}
+
 function transitLabel(leg){
   if(leg.mode==="SHUTTLE") return `NUS shuttle ${leg.line}`;
   if(leg.mode==="BUS") return `Bus ${leg.line}`;

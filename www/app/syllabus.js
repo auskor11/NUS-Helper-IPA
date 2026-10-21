@@ -157,10 +157,22 @@ function importSyllabus(modules){
   // Scores you've entered survive a re-import of the same module.
   const key=(code,title)=>`${code}|${title.toLowerCase().replace(/[^a-z0-9]+/g," ").trim()}`;
   const scores=new Map();
-  for(const m of state.syllabus?.modules||[]) for(const a of m.assessments||[]) if(a.score!=null) scores.set(key(m.code,a.title),{score:a.score,scoreText:a.scoreText});
+  const examVenues=new Map(), targets=new Map();
+  for(const m of state.syllabus?.modules||[]) if(m.target!=null) targets.set(m.code,m.target);
+  for(const m of modules) if(targets.has(m.code)&&m.target==null) m.target=targets.get(m.code);
+  for(const m of state.syllabus?.modules||[]) for(const a of m.assessments||[]){
+    if(a.score!=null) scores.set(key(m.code,a.title),{score:a.score,scoreText:a.scoreText});
+    if(a.official&&a.venue) examVenues.set(m.code,a.venue);
+  }
   for(const m of modules) for(const a of m.assessments) Object.assign(a,scores.get(key(m.code,a.title))||{});
   state.syllabus={modules:[...(state.syllabus?.modules||[]).filter(m=>!codes.has(m.code)),...modules]
     .sort((a,b)=>a.code.localeCompare(b.code)),importedAt:Date.now()};
+  // Put the official exam times (app/exams.js) and your exam venues back.
+  refreshExams({force:true}).then(()=>{
+    let changed=false;
+    for(const [code,venue] of examVenues){ const a=(syllabusModule(code)?.assessments||[]).find(x=>x.official); if(a&&!a.venue){ a.venue=venue; changed=true; } }
+    if(changed) save().catch(()=>{});
+  });
   return {modules:modules.length,weeks:modules.reduce((n,m)=>n+m.weeks.length,0),
     assessments:modules.reduce((n,m)=>n+m.assessments.length,0)};
 }
@@ -292,6 +304,7 @@ function gradeCardHTML(m,{title=m.code}={}){
       <span class="left" style="width:${g.remaining/scale*100}%"></span>
     </div>
     <p class="grade-legend"><i class="earned"></i>Earned <i class="lost"></i>Lost <i class="left"></i>${pctText(g.remaining)} still to come</p>
+    ${targetLineHTML(m,g)}
     ${Math.abs(g.total-100)>0.5?`<div class="grade-warn">Weights add up to ${pctText(g.total)}, not 100%. Check the outline or add the missing component in a new file.</div>`:""}
     <div class="grade-rows">${(m.assessments||[]).map((a,i)=>weightValue(a.weight)==null?"":`
       <button class="grade-row" data-grade="${esc(m.code)}|${i}">
@@ -299,6 +312,79 @@ function gradeCardHTML(m,{title=m.code}={}){
         <span class="grade-score ${a.score==null?"empty":""}">${a.score==null?"Add score":`${esc(a.scoreText||pctText(a.score))}<small>+${pctText(weightValue(a.weight)*a.score/100)}</small>`}</span>
       </button>`).join("")}</div>
   </div>`;
+}
+
+/* ---------- What do I need? ---------- */
+// The average you need on what's left to finish the module on a target
+// percentage. NUS grades are moderated, so the % for each letter grade varies
+// by module; the target is a percentage, not a letter.
+
+const TARGETS=[50,60,70,75,80,85,90];
+
+// {need, best}: average needed on the remaining components, and the highest
+// final percentage still possible.
+function targetNeed(g,target){
+  const best=g.earned+g.remaining;
+  return {need:g.remaining>0.01?(target-g.earned)/g.remaining*100:null,best};
+}
+
+function needText(g,target){
+  const {need,best}=targetNeed(g,target);
+  if(need==null) return g.earned>=target?`You finished above ${target}%.`:`You finished below ${target}%.`;
+  if(need<=0) return `${target}% is already secured, whatever you score on the rest.`;
+  if(need>100) return `${target}% is out of reach: the most you can finish with is ${pctText(best)}.`;
+  return `You need <b>${pctText(need)}</b> on average across the remaining ${pctText(g.remaining)}.`;
+}
+
+// Components still to be graded, leaving out "best N" groups already settled.
+function ungradedTitles(m){
+  const list=m.assessments||[];
+  const settled=a=>a.group&&a.best&&list.filter(x=>x.group===a.group&&x.score!=null).length>=a.best;
+  return list.filter(a=>weightValue(a.weight)!=null&&a.score==null&&!settled(a)).map(a=>a.title);
+}
+
+function targetLineHTML(m,g){
+  if(!g.comps.length||g.remaining<0.01) return "";
+  const t=m.target;
+  const left=ungradedTitles(m);
+  return `<button class="target-line" data-target="${esc(m.code)}">
+    ${icon("M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20zM12 18a6 6 0 1 0 0-12 6 6 0 0 0 0 12zM12 14a2 2 0 1 0 0-4 2 2 0 0 0 0 4z",16)}
+    <span>${t==null?`<b>What do I need?</b> Set a target to see the score you need on ${esc(left.slice(0,2).join(" and ")||"the rest")}${left.length>2?" and the rest":""}.`
+      :`<b>Aiming for ${t}%</b> · ${needText(g,t)}`}</span>${icon("M9 18l6-6-6-6",16)}</button>`;
+}
+
+function openTargetSheet(code){
+  const m=syllabusModule(code);
+  if(!m) return;
+  const g=gradeSummary(m);
+  const left=ungradedTitles(m);
+  const row=t=>{
+    const {need}=targetNeed(g,t);
+    const label=need==null?"–":need<=0?"Secured":need>100?"Out of reach":pctText(need);
+    const cls=need==null?"":need<=0?"ok":need>100?"no":need>85?"hard":"";
+    return `<button class="target-row ${m.target===t?"on":""}" data-pick="${t}"><span>${t}% overall</span><b class="${cls}">${label}</b></button>`;
+  };
+  openModal(`<p class="kicker">${esc(code)} · WHAT DO I NEED?</p><h2>Score needed on the rest</h2>
+    <p class="subtle">So far you've earned ${pctText(g.earned)} of ${pctText(g.gradedWeight)} graded. Still to come: ${pctText(g.remaining)}${left.length?` (${esc(left.join(", "))})`:""}. The most you can finish with is ${pctText(g.earned+g.remaining)}.</p>
+    <div class="target-table"><div class="target-head"><span>Final result</span><span>Average needed</span></div>${TARGETS.map(row).join("")}</div>
+    <form class="form" id="targetForm">
+      <label>Your target (%)<input class="input" name="target" type="number" min="1" max="100" step="0.5" inputmode="decimal" value="${m.target??""}" placeholder="e.g. 78"></label>
+      <div id="targetHint" class="small-help">${m.target!=null?needText(g,m.target):"Tap a row or type a target."}</div>
+      <button class="btn primary full">Save target</button>
+      ${m.target!=null?`<button type="button" class="btn ghost full" id="clearTarget">Clear target</button>`:""}
+    </form>
+    <p class="small-help">NUS grades are moderated, so the percentage for each letter grade differs by module. Use past cut-offs your seniors share as a guide.</p>`);
+  const form=$("#targetForm");
+  const valid=v=>Number.isFinite(v)&&v>0&&v<=100;
+  form.target.oninput=()=>{ const v=parseFloat(form.target.value); $("#targetHint").innerHTML=valid(v)?needText(g,v):"Enter a percentage from 1 to 100."; };
+  $$("[data-pick]").forEach(b=>b.onclick=()=>{ form.target.value=b.dataset.pick; form.target.oninput(); $$("[data-pick]").forEach(x=>x.classList.toggle("on",x===b)); });
+  form.onsubmit=e=>{
+    e.preventDefault();
+    const v=parseFloat(form.target.value);
+    if(!valid(v)){ $("#targetHint").textContent="Enter a percentage from 1 to 100."; return; }
+    m.target=v; closeModal(); save(); toast("Target saved");
+  };
+  $("#clearTarget")?.addEventListener("click",()=>{ delete m.target; closeModal(); save(); });
 }
 
 // "17/20", "85%" or "85" -> 85
@@ -338,6 +424,7 @@ function openScoreSheet(code,i){
 // Score rows and the import / help / remove buttons inside a view.
 function bindSyllabusActions(el){
   $$("[data-grade]",el).forEach(b=>b.onclick=()=>{ const [code,i]=b.dataset.grade.split("|"); openScoreSheet(code,+i); });
+  $$("[data-target]",el).forEach(b=>b.onclick=()=>openTargetSheet(b.dataset.target));
   $$("[data-syl=help]",el).forEach(b=>b.onclick=openSyllabusHelp);
   $$("[data-syl=import]",el).forEach(b=>b.onclick=openSyllabusImporter);
   $$("[data-syl=clear]",el).forEach(b=>b.onclick=async()=>{

@@ -117,14 +117,16 @@ views.courses=(()=>{
             <span class="lost" style="width:${(g.gradedWeight-g.earned)/scale*100}%"></span>
             <span class="left" style="width:${g.remaining/scale*100}%"></span>
           </div>
-          <p class="grade-line">${g.gradedWeight?`<b>${pctText(g.earned)}</b> earned of ${pctText(g.gradedWeight)} graded · ${pctText(g.remaining)} to come`:`No scores yet · ${pctText(g.total)} to come`}</p>`
+          <p class="grade-line">${g.gradedWeight?`<b>${pctText(g.earned)}</b> earned of ${pctText(g.gradedWeight)} graded · ${pctText(g.remaining)} to come`:`No scores yet · ${pctText(g.total)} to come`}</p>
+          ${m.target!=null&&g.remaining>0.01?`<p class="grade-line target-mini">Aiming for ${m.target}% · ${needText(g,m.target)}</p>`:""}`
           :`<p class="subtle syl-none">No weightage in the file.</p>`}
       </button>`;
     }).join("");
   }
 
   function render(){
-    const mods=state.syllabus?.modules||[];
+    // Modules with only an exam (no syllabus imported) appear under Assessments.
+    const all=state.syllabus?.modules||[], mods=all.filter(m=>!m.examOnly);
     const aw=academicWeek(new Date());
     el.innerHTML=`
       ${pageHeader("Courses",{
@@ -135,14 +137,16 @@ views.courses=(()=>{
         ${[["week","This week"],["assess","Assessments"],["grades","Grades"],["gpa","GPA"]].map(([k,l])=>`<button class="${mode===k?"on":""}" data-mode="${k}">${l}</button>`).join("")}
       </div>
       ${mode==="gpa"?gpaViewHTML()
+        :mode==="assess"&&all.length?examTimetableHTML()+assessmentTimelineHTML(allAssessments())
         :!mods.length?`${finishBannerHTML()}${coursesEmptyHTML()}`
-        :mode==="week"?finishBannerHTML()+weekView(mods):mode==="assess"?assessmentTimelineHTML(allAssessments()):gradesView(mods)}`;
+        :mode==="week"?finishBannerHTML()+weekView(mods):gradesView(mods)}`;
     $("#coursesMenu",el).onclick=openCoursesMenu;
     $$("[data-mode]",el).forEach(b=>b.onclick=()=>setMode(b.dataset.mode));
     $("#prevWeek",el)?.addEventListener("click",()=>{ selected=addDays(selected,-7); render(); });
     $("#nextWeek",el)?.addEventListener("click",()=>{ selected=addDays(selected,7); render(); });
     bindSyllabusActions(el);
     bindGpaView(el);
+    bindExamTimetable(el);
   }
 
   return {

@@ -4,6 +4,9 @@
  *   state.modules[i].grade / .su: this semester's expected grade and S/U plan.
  *   .pf: graded CS/CU only (pass/fail, from NUSMods), so the grade is CS or CU.
  *   state.gpa.suLimit: S/U units allowed (NUS: 32 for most students).
+ *   state.gpa.plan: modules planned for later semesters [{id,code,name,units,grade,su,pf}]
+ *     and state.gpa.target: the cumulative GPA you're aiming for. Timetables
+ *     and clashes stay in NUSMods; this only projects your GPA.
  * Shown as Courses → GPA, and courses/semester for one past semester.
  */
 
@@ -148,6 +151,8 @@ function gpaViewHTML(){
       :state.modules.some(m=>m.grade)?"":`<p class="small-help gpa-hint">Pick an expected grade for each module to see your projected GPA and which module is best to S/U.</p>`}`
     :`<div class="empty-inline">No modules this semester yet. Add them in Settings → Modules & timetable.</div>`}
 
+    ${planAheadHTML()}
+
     <h3 class="section-title">Past semesters</h3>
     ${(state.archive||[]).length?`<div class="card flush list">${[...state.archive].reverse().map(s=>{
       const g=gpaOf(s.modules||[]);
@@ -161,7 +166,94 @@ function gpaViewHTML(){
     </div>`;
 }
 
+/* ---------- Plan ahead ---------- */
+
+const planList=()=>state.gpa?.plan||[];
+const letterFor=pts=>Object.entries(GRADE_POINTS).filter(([g])=>g!=="A+").sort((a,b)=>a[1]-b[1]).find(([,p])=>p>=pts-1e-9)?.[0]||"A";
+
+function planAheadHTML(){
+  const plan=planList();
+  const now=gpaOf([...pastModules(),...state.modules]);
+  const after=gpaOf([...pastModules(),...state.modules,...plan]);
+  const planSu=plan.filter(m=>m.su).reduce((n,m)=>n+unitsOf(m),0);
+  const limit=state.gpa?.suLimit??32, suLeft=limit-suUnitsUsed()-planSu;
+  const target=state.gpa?.target;
+  // Average grade point needed on planned (graded, non-S/U) units to reach the target.
+  const open=plan.filter(m=>!m.pf&&!m.su).reduce((n,m)=>n+unitsOf(m),0);
+  let need=null;
+  if(target!=null&&open>0) need=(target*(now.units+open)-now.pts)/open;
+  const needText=need==null?"":need<=0?`You're already there: any grades keep you at ${target.toFixed(2)} or above.`
+    :need>5?`Out of reach with ${open} planned units: even straight A's give ${gpaText((now.pts+5*open)/(now.units+open))}.`
+    :`You need an average of <b>${need.toFixed(2)}</b> (about <b>${letterFor(need)}</b>) across your ${open} planned graded units.`;
+  return `<h3 class="section-title">Plan ahead <small>future semesters</small></h3>
+    <div class="card flush gpa-table plan-table">
+      ${plan.length?`<div class="gpa-row head"><span>Module</span><span>Units</span><span>Expected</span><span>S/U</span></div>
+      ${plan.map((m,i)=>`<div class="gpa-row-wrap"><div class="gpa-row">
+        <span class="gpa-mod"><input class="code-input" value="${esc(m.code)}" placeholder="Code" data-plan-code="${i}" autocapitalize="characters" autocomplete="off"><small>${esc(m.name||"")}</small></span>
+        <input class="units-input" type="number" min="0" step="0.5" inputmode="decimal" value="${esc(String(unitsOf(m)))}" data-plan-units="${i}" aria-label="Units">
+        ${gradeSelectHTML(m.grade||"",`data-plan-grade="${i}" aria-label="Expected grade"`,m.pf)}
+        ${suCellHTML(m,`data-plan-su="${i}"`)}
+      </div><button class="link danger-text remove-mod" data-plan-remove="${i}">Remove</button></div>`).join("")}
+      <div class="gpa-foot">After these <b>${gpaText(after.gpa)}</b>${after.gpa!=null&&now.gpa!=null?` <i class="${after.gpa>=now.gpa?"up":"down"}">${after.gpa>=now.gpa?"+":""}${(after.gpa-now.gpa).toFixed(2)}</i>`:""} · ${planSu?`${planSu} S/U units planned, `:""}${Math.max(0,suLeft)} S/U units left</div>`
+      :`<div class="empty-inline">Add modules you plan to take to see where your GPA could go. Build the timetable itself in NUSMods.</div>`}
+    </div>
+    <div class="card plan-target">
+      <div class="side-head"><h4>Target GPA</h4><button class="link" id="planTarget">${target!=null?target.toFixed(2):"Set"}</button></div>
+      <p class="grade-line">${target==null?"Set the cumulative GPA you're aiming for to see the grades you need in your planned modules."
+        :!open?"Add planned modules (not S/U or pass/fail) to see what you need.":needText}</p>
+    </div>
+    <div class="syl-actions"><button class="btn secondary" id="planAdd">+ Plan a module</button></div>`;
+}
+
+async function lookUpPlanned(m){
+  try{
+    const d=await getJSON(`${nusmodsBase()}/modules/${encodeURIComponent(m.code)}.json`);
+    m.name=d.title||"";
+    const u=parseFloat(d.moduleCredit); if(Number.isFinite(u)) m.units=u;
+    m.pf=isPassFail(d);
+    if(m.pf){ m.grade="CS"; m.su=false; }
+  }catch{ m.name=""; }
+}
+
+function openPlanTarget(){
+  openModal(`<h2>Target GPA</h2>
+    <form class="form" id="targetGpaForm">
+      <label>Cumulative GPA you're aiming for<input class="input" name="target" type="number" min="0" max="5" step="0.01" inputmode="decimal" value="${state.gpa?.target??""}" placeholder="e.g. 4.00"></label>
+      <p class="small-help">On the NUS 5-point scale. 4.50 and above is Honours (Highest Distinction) for most degrees; check your faculty's bands.</p>
+      <button class="btn primary full">Save</button>
+      ${state.gpa?.target!=null?`<button type="button" class="btn ghost full" id="clearTargetGpa">Clear</button>`:""}
+    </form>`);
+  $("#targetGpaForm").onsubmit=e=>{
+    e.preventDefault();
+    const v=parseFloat(new FormData(e.target).get("target"));
+    if(Number.isFinite(v)&&v>0&&v<=5){ state.gpa={...(state.gpa||{}),target:v}; save(); }
+    closeModal();
+  };
+  $("#clearTargetGpa")?.addEventListener("click",()=>{ const g={...(state.gpa||{})}; delete g.target; state.gpa=g; save(); closeModal(); });
+}
+
+function bindPlanAhead(el){
+  const plan=()=>{ if(!state.gpa) state.gpa={suLimit:32}; if(!state.gpa.plan) state.gpa.plan=[]; return state.gpa.plan; };
+  $("#planAdd",el)?.addEventListener("click",()=>{
+    plan().push({id:uid(),code:"",name:"",units:4,grade:"",su:false});
+    save(); views.courses?.refresh?.();
+    setTimeout(()=>$$("[data-plan-code]",el).at(-1)?.focus(),50);
+  });
+  $("#planTarget",el)?.addEventListener("click",openPlanTarget);
+  $$("[data-plan-code]",el).forEach(x=>x.onchange=async()=>{
+    const m=plan()[+x.dataset.planCode]; if(!m) return;
+    m.code=x.value.trim().toUpperCase().replace(/\s+/g,"");
+    if(m.code) await lookUpPlanned(m);
+    x.blur(); save();
+  });
+  $$("[data-plan-units]",el).forEach(x=>x.onchange=()=>{ const v=parseFloat(x.value); if(Number.isFinite(v)&&v>=0){ plan()[+x.dataset.planUnits].units=v; save(); } });
+  $$("[data-plan-grade]",el).forEach(x=>x.onchange=()=>{ plan()[+x.dataset.planGrade].grade=x.value; save(); });
+  $$("[data-plan-su]",el).forEach(x=>x.onclick=()=>{ const m=plan()[+x.dataset.planSu]; m.su=!m.su; save(); });
+  $$("[data-plan-remove]",el).forEach(x=>x.onclick=()=>{ plan().splice(+x.dataset.planRemove,1); save(); });
+}
+
 function bindGpaView(el){
+  bindPlanAhead(el);
   $$("[data-finish]",el).forEach(b=>b.onclick=openFinishSemester);
   $$("[data-cur-grade]",el).forEach(s=>s.onchange=()=>{ state.modules[+s.dataset.curGrade].grade=s.value; save(); });
   $$("[data-cur-units]",el).forEach(inp=>inp.onchange=()=>{ const v=parseFloat(inp.value); if(Number.isFinite(v)&&v>=0){ state.modules[+inp.dataset.curUnits].units=v; save(); } });

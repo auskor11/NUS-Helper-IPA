@@ -744,3 +744,49 @@ body.sheet-open{overflow:hidden}
 .trip-bar[hidden]{display:none}
 .trip-bar span{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .trip-banner{background:color-mix(in srgb,var(--accent) 14%,var(--surface));border-color:color-mix(in srgb,var(--accent) 45%,var(--line));color:var(--text)}
+
+/* MRT disruptions */
+.mrt-banner{background:color-mix(in srgb,var(--danger) 13%,var(--surface));border:1px solid color-mix(in srgb,var(--danger) 35%,var(--line));color:var(--text);align-items:flex-start}
+.mrt-banner svg{color:var(--danger);flex:none;margin-top:1px}
+.mrt-banner small{display:block;color:var(--muted);margin-top:3px;font-size:12.5px}
+.map-panel .mrt-banner{margin:8px 0 10px}
+.route-warn{display:flex!important;align-items:center;gap:5px;color:var(--danger)!important;font-weight:600;margin-top:4px}
+
+/* Missed bus during a trip */
+.behind-card{margin:12px 0;padding:14px;border-radius:16px;background:color-mix(in srgb,var(--warn) 12%,var(--surface));border:1px solid color-mix(in srgb,var(--warn) 35%,var(--line))}
+.behind-card b{display:flex;align-items:center;gap:6px;color:var(--warn)}
+.behind-card p{margin:6px 0 12px;font-size:14px;color:var(--text)}
+.behind-card .two{gap:8px}
+
+/* Exam timetable */
+.exam-card{display:flex;flex-direction:column;gap:2px;margin-bottom:16px}
+.exam-row{display:flex;align-items:center;gap:12px;width:100%;padding:10px 4px;border-radius:12px}
+.exam-row:active{background:var(--surface2)}
+.exam-date{flex:none;width:46px;height:50px;border-radius:12px;background:color-mix(in srgb,var(--c-assessment) 14%,var(--surface2));display:flex;flex-direction:column;align-items:center;justify-content:center;color:var(--c-assessment)}
+.exam-date b{font-size:19px;line-height:1}
+.exam-date small{font-size:11px;font-weight:700;text-transform:uppercase}
+.exam-main{flex:1;min-width:0;display:flex;flex-direction:column;gap:1px}
+.exam-main small{color:var(--muted);font-size:12.5px}
+.exam-main i{font-style:normal}
+.exam-novenue{color:var(--accent)!important}
+.exam-gap{display:block;margin:2px 0 0 62px;font-size:11.5px;font-weight:600;color:var(--muted)}
+.exam-gap.tight{color:#f59e0b}
+.exam-gap.clash{color:var(--danger)}
+
+/* What do I need? */
+.target-line{display:flex;align-items:center;gap:10px;width:100%;margin:10px 0 4px;padding:11px 12px;border-radius:12px;background:color-mix(in srgb,var(--accent) 10%,var(--surface2));font-size:13.5px;text-align:left}
+.target-line>svg:first-child{color:var(--accent);flex:none}
+.target-line span{flex:1}
+.target-line>svg:last-child{color:var(--muted);flex:none}
+.target-mini{color:var(--text)}
+.target-table{margin:12px 0;border:1px solid var(--line);border-radius:14px;overflow:hidden}
+.target-head,.target-row{display:flex;justify-content:space-between;padding:10px 14px}
+.target-head{font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);background:var(--surface2)}
+.target-row{width:100%;border-top:1px solid var(--line)}
+.target-row.on{background:color-mix(in srgb,var(--accent) 12%,transparent)}
+.target-row b.ok{color:var(--ok)} .target-row b.hard{color:#f59e0b} .target-row b.no{color:var(--danger)}
+
+/* Plan ahead */
+.plan-table .gpa-mod small{display:block;margin-top:2px}
+.gpa-foot i{font-style:normal;font-weight:700} .gpa-foot i.up{color:var(--ok)} .gpa-foot i.down{color:var(--danger)}
+.plan-target{margin-top:12px}
