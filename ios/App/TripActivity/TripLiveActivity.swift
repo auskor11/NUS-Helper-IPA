@@ -51,7 +51,7 @@ struct TripLiveActivity: Widget {
             } compactTrailing: {
                 MetricView(state: s, large: false)
             } minimal: {
-                LineBadge(state: s, compact: true)
+                MinimalMetric(state: s)
             }
             .keylineTint(Color(hex: s.lineColor))
             .widgetURL(tripURL)
@@ -97,6 +97,33 @@ struct MetricView: View {
         }
         .font(large ? .title3.weight(.semibold) : .caption.weight(.semibold))
         .foregroundStyle(state.phase == "arrived" ? .green : .white)
+    }
+}
+
+/// The island's smallest form, used when another app (music, a timer) shares
+/// it: the number that matters ("5" over "min", "3" over "stops"), in the
+/// line's colour, since the badge alone hides when the bus comes.
+struct MinimalMetric: View {
+    let state: TripAttributes.ContentState
+
+    var body: some View {
+        let parts = state.metric.split(separator: " ", maxSplits: 1).map(String.init)
+        let tint = state.phase == "arrived" ? Color.green : Color(hex: state.lineColor)
+        if state.phase == "arrived" {
+            Image(systemName: "checkmark").font(.caption.weight(.bold)).foregroundStyle(.green)
+        } else if parts.count == 2 {
+            VStack(spacing: -2) {
+                Text(parts[0]).font(.system(size: 13, weight: .bold)).monospacedDigit()
+                    .minimumScaleFactor(0.6)
+                Text(parts[1]).font(.system(size: 8, weight: .semibold))
+            }
+            .lineLimit(1)
+            .foregroundStyle(tint)
+        } else {
+            Text(state.metric).font(.system(size: 11, weight: .bold))
+                .minimumScaleFactor(0.6).lineLimit(1)
+                .foregroundStyle(tint)
+        }
     }
 }
 

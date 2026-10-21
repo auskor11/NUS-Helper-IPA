@@ -52,8 +52,13 @@ body[data-view="map"]:before{display:none}
 
 /* ---------- Views ---------- */
 #views{max-width:1100px;margin:0 auto}
-.view{padding:calc(var(--safe-top) + 10px) 16px 96px;animation:fade .18s ease}
-@keyframes fade{from{opacity:.4}to{opacity:1}}
+.view{padding:calc(var(--safe-top) + 10px) 16px 96px;animation:fade .28s cubic-bezier(.22,.9,.3,1)}
+@keyframes fade{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+.view-map{animation:none}
+/* New routes fade in on the map. */
+.view-map .leaflet-overlay-pane path{animation:routeIn .45s ease}
+@keyframes routeIn{from{opacity:0}}
+@media (prefers-reduced-motion:reduce){*,*::before,*::after{animation-duration:.01ms!important;transition-duration:.01ms!important}}
 .page-head{display:flex;align-items:center;gap:12px;padding:10px 0 16px}
 .page-head-text{flex:1;min-width:0}
 .page-head h1{font-size:28px;font-weight:800}
@@ -348,8 +353,8 @@ body:not(.light) .eta-cell.load-LSD b,body:not(.light) .eta-legend .load-LSD{col
 .map-panel.collapsed>:not(.panel-handle):not(.panel-close):not(.kicker):not(h2):not(.panel-title):not(.peek){display:none!important}
 .map-panel.collapsed .peek{display:block}
 .map-panel.collapsed h2{font-size:18px}
-.map-panel{position:absolute;left:0;right:0;bottom:0;z-index:600;background:var(--surface);border-radius:22px 22px 0 0;border-top:1px solid var(--line);box-shadow:0 -10px 30px rgba(0,0,0,.25);padding:8px 18px 18px;max-height:62%;overflow:auto;animation:up .22s ease}
-@keyframes up{from{transform:translateY(30px);opacity:.5}to{transform:none;opacity:1}}
+.map-panel{position:absolute;left:0;right:0;bottom:0;z-index:600;background:var(--surface);border-radius:22px 22px 0 0;border-top:1px solid var(--line);box-shadow:0 -10px 30px rgba(0,0,0,.25);padding:8px 18px 18px;max-height:62%;overflow:auto;animation:up .38s cubic-bezier(.22,.9,.3,1)}
+@keyframes up{from{transform:translateY(100%);opacity:.7}to{transform:none;opacity:1}}
 .panel-close{position:absolute;top:12px;right:12px;width:32px;height:32px;border-radius:50%;background:var(--surface2);display:grid;place-items:center;color:var(--muted)}
 .panel-title{display:flex;align-items:center;gap:10px;padding-right:84px}
 .map-panel #refreshEta{position:absolute;top:12px;right:52px;width:32px;height:32px;border-radius:50%;background:var(--surface2);border:0;color:var(--muted);z-index:1}

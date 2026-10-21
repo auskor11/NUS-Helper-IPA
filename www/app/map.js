@@ -361,10 +361,57 @@ views.map=(()=>{
 
   /* ---------- Panel ---------- */
 
+  /* Motion: the panel grows or shrinks to fit new content instead of
+   * jumping, new screens slide in (forward from the right, back from the
+   * left), and the panel slides away when closed. */
+  const EASE="cubic-bezier(.22,.9,.3,1)";
+  const calm=()=>matchMedia("(prefers-reduced-motion: reduce)").matches;
+  let panelTargetH=null, closing=null, slideNext=null;
+
+  // Height the panel is settling at (mid-animation offsetHeight lags behind).
+  function panelHeight(){ return panelTargetH ?? $("#mapPanel",el).offsetHeight; }
+
+  // Runs `change` (which replaces the panel's content) with the height
+  // change animated and the new content in `target` sliding or fading in.
+  function morphPanel(change,target,dir=null){
+    const p=$("#mapPanel",el);
+    const animate=!p.hidden&&!closing&&!calm();
+    const from=animate?p.getBoundingClientRect().height:0;
+    change();
+    if(!animate) return;
+    p.getAnimations().forEach(a=>{ if(a.id==="panel-h") a.cancel(); });
+    const to=p.getBoundingClientRect().height;
+    if(Math.abs(to-from)>2){
+      panelTargetH=to;
+      const a=p.animate([{height:`${from}px`},{height:`${to}px`}],{duration:340,easing:EASE});
+      a.id="panel-h";
+      a.onfinish=a.oncancel=()=>{ if(panelTargetH===to) panelTargetH=null; };
+    }
+    if(dir&&target){
+      const x=dir==="back"?-36:dir==="forward"?36:0;
+      target.animate([{opacity:0,transform:`translateX(${x}px)`},{opacity:1,transform:"none"}],{duration:dir==="fade"?220:320,easing:EASE});
+    }
+  }
+
+  function setRouteBody(html){
+    const body=$("#routeBody",el), dir=slideNext;
+    slideNext=null;
+    if(!body) return;
+    morphPanel(()=>{ body.innerHTML=html; },body,dir);
+    if(dir==="forward") $("#mapPanel",el).scrollTo({top:0,behavior:calm()?"auto":"smooth"});
+  }
+
   function openPanel(html,{directions=false}={}){
     const p=$("#mapPanel",el);
-    p.classList.toggle("directions",directions);
-    p.innerHTML=`<button class="panel-handle" aria-label="Collapse or expand"><span class="sheet-grabber"></span></button><button class="panel-close" aria-label="Close">${icon("M6 6l12 12M18 6 6 18",18)}</button>${html}`;
+    if(closing){ closing.cancel(); closing=null; p.hidden=true; p.style.pointerEvents=""; }
+    const wasOpen=!p.hidden;
+    morphPanel(()=>{
+      p.classList.toggle("directions",directions);
+      p.innerHTML=`<button class="panel-handle" aria-label="Collapse or expand"><span class="sheet-grabber"></span></button><button class="panel-close" aria-label="Close">${icon("M6 6l12 12M18 6 6 18",18)}</button>${html}`;
+      p.classList.remove("collapsed");
+    });
+    if(wasOpen && !calm()) [...p.children].slice(2).forEach(c=>c.animate([{opacity:0,transform:"translateX(28px)"},{opacity:1,transform:"none"}],{duration:300,easing:EASE}));
+    p.scrollTop=0;
     p.hidden=false;
     p.classList.remove("collapsed");
     el.classList.add("panel-open");
@@ -378,9 +425,11 @@ views.map=(()=>{
   function setCollapsed(on){
     const p=$("#mapPanel",el);
     if(p.hidden) return;
-    p.classList.toggle("collapsed",on);
-    el.classList.toggle("panel-collapsed",on);
-    p.scrollTop=0;
+    morphPanel(()=>{
+      p.classList.toggle("collapsed",on);
+      el.classList.toggle("panel-collapsed",on);
+      p.scrollTop=0;
+    });
     setTimeout(()=>{ if(routeLayer) fitRouteToPanel(); },60);
   }
 
@@ -407,7 +456,7 @@ views.map=(()=>{
     map.setView([p.lat,p.lng],zoom,{animate:false});
     const panel=$("#mapPanel",el);
     const wide=matchMedia("(min-width:900px)").matches;
-    if(!panel.hidden && !wide) map.panBy([0,panel.offsetHeight/2],{animate:false});
+    if(!panel.hidden && !wide) map.panBy([0,panelHeight()/2],{animate:false});
   }
 
   function clearRoute(){
@@ -418,8 +467,14 @@ views.map=(()=>{
   function closePanel(){
     clearInterval(refreshTimer);
     clearRoute();
-    $("#mapPanel",el).hidden=true;
+    const p=$("#mapPanel",el);
     el.classList.remove("panel-open");
+    if(!p.hidden && !closing && !calm()){
+      closing=p.animate([{transform:"none",opacity:1},{transform:"translateY(105%)",opacity:.6}],{duration:260,easing:"cubic-bezier(.4,0,.8,.4)",fill:"forwards"});
+      const mine=closing;
+      p.style.pointerEvents="none";
+      mine.onfinish=()=>{ if(closing===mine){ closing=null; p.hidden=true; mine.cancel(); p.style.pointerEvents=""; } };
+    }else if(!closing) p.hidden=true;
     if(selected?.type==="nus") nusMarkers.get(selected.code)?.setIcon(nusIcon());
     if(pinMarker){ pinMarker.remove(); pinMarker=null; }
     selected=null;
@@ -468,8 +523,11 @@ views.map=(()=>{
     if(lastPosition) pts.push(L.latLng(lastPosition.lat,lastPosition.lng));
     if(!pts.length) return;
     const wide=matchMedia("(min-width:900px)").matches;
-    const panelH=$("#mapPanel",el).offsetHeight;
-    map.fitBounds(L.latLngBounds(pts),{paddingTopLeft:[wide?460:40,wide?40:125],paddingBottomRight:[40,wide?40:panelH+20],maxZoom:18});
+    const panelH=panelHeight();
+    const opts={paddingTopLeft:[wide?460:40,wide?40:125],paddingBottomRight:[40,wide?40:panelH+20],maxZoom:18};
+    // Glide to the route rather than jumping there.
+    if(calm()) map.fitBounds(L.latLngBounds(pts),opts);
+    else map.flyToBounds(L.latLngBounds(pts),{...opts,duration:.7,easeLinearity:.35});
   }
 
   // Directions with Transit (NUS shuttle, bus, MRT), Walk, Cycle and Drive.
@@ -490,12 +548,12 @@ views.map=(()=>{
     let from;
     try{ from=await getPosition({fresh:true}); startLocation(); }
     catch(err){
-      $("#routeBody",el).innerHTML=`<div class="empty-inline">${esc(err.message)} Directions start from where you are, so turn on location access for NUS Companion.</div><button class="btn secondary full" id="routeBack">Back</button>`;
+      setRouteBody(`<div class="empty-inline">${esc(err.message)} Directions start from where you are, so turn on location access for NUS Companion.</div><button class="btn secondary full" id="routeBack">Back</button>`);
       $("#routeBack",el).onclick=back;
       return;
     }
     if(selected!==dest) return;
-    $("#routeBody",el).innerHTML=`<div class="empty-inline"><span class="spinner sm"></span>Finding routes…</div>`;
+    setRouteBody(`<div class="empty-inline"><span class="spinner sm"></span>Finding routes…</div>`);
 
     const straight=distanceM(from,dest);
     const transit={shuttle:null,public:null};   // null = still loading
@@ -530,18 +588,19 @@ views.map=(()=>{
       if(current==="transit" && view==="list") renderTransitList();
     }
 
-    let current=null, view="list";
+    let current=null, view="list", listScroll=0;
     function pick(mode){
+      if(current&&current!==mode) slideNext="fade";
       current=mode; view="list";
       $$("#modeTabs button",el).forEach(b=>b.classList.toggle("on",b.dataset.mode===mode));
       if(mode==="transit") return renderTransitList();
       const r=street[mode];
       if(r instanceof Promise||r==null){
-        $("#routeBody",el).innerHTML=`<div class="empty-inline"><span class="spinner sm"></span>Finding ${MODE_LABELS[mode].toLowerCase()} route…</div>`;
+        setRouteBody(`<div class="empty-inline"><span class="spinner sm"></span>Finding ${MODE_LABELS[mode].toLowerCase()} route…</div>`);
         return;
       }
       if(r) renderStreet(mode,r);
-      else{ $("#routeBody",el).innerHTML=`<div class="empty-inline">No ${MODE_LABELS[mode].toLowerCase()} route found.</div>${footer()}`; bindFooter(); clearRoute(); }
+      else{ setRouteBody(`<div class="empty-inline">No ${MODE_LABELS[mode].toLowerCase()} route found.</div>${footer()}`); bindFooter(); clearRoute(); }
     }
 
     function footer(trip=false){
@@ -571,11 +630,11 @@ views.map=(()=>{
     function renderStreet(mode,route){
       const arrive=clockTime(new Date(Date.now()+route.duration*1000));
       peek(`${MODE_LABELS[mode]} · ${walkMinutes(route.duration)} min · ${distanceLabel(route.distance)} · arrive ${arrive}`);
-      $("#routeBody",el).innerHTML=`
+      setRouteBody(`
         <div class="route-summary"><b>${walkMinutes(route.duration)} min</b><span>${distanceLabel(route.distance)} · arrive ${arrive}</span></div>
         <details class="route-steps"><summary>Step-by-step (${route.steps.length})</summary>
           <ol>${route.steps.map(st=>`<li>${stepIcon(st)}<span>${esc(st.text)}${st.type!=="arrive"?`<small>${distanceLabel(st.distance)}</small>`:""}</span></li>`).join("")}</ol>
-        </details>${footer("street")}`;
+        </details>${footer("street")}`);
       bindFooter(()=>streetPlan(mode,route),()=>({kind:"street",mode,dest:{type:dest.type,code:dest.code,name:dest.name,lat:dest.lat,lng:dest.lng,...(dest.type==="public"||dest.type==="nus"?{}:{})}}));
       const color={walk:"#6d5df5",cycle:"#0ea5e9",drive:"#f97316"}[mode];
       drawPath([
@@ -600,11 +659,11 @@ views.map=(()=>{
       const its=transitTrips(), loading=transit.shuttle==null||transit.public==null;
       if(!its.length && !loading){
         peek("No public transport found");
-        $("#routeBody",el).innerHTML=`<div class="empty-inline">No shuttle, bus or MRT routes found right now. Try Walk or Drive.</div>${footer()}`;
+        setRouteBody(`<div class="empty-inline">No shuttle, bus or MRT routes found right now. Try Walk or Drive.</div>${footer()}`);
         bindFooter(); clearRoute(); return;
       }
       if(its[0]) peek(`Transit · ${walkMinutes(its[0].duration)} min · arrive ${clockTime(its[0].end)}`);
-      $("#routeBody",el).innerHTML=`<div class="route-sort">${Object.entries(SORTS).map(([k,l])=>`<button class="chip ${sortBy===k?"on":""}" data-sort="${k}">${l}</button>`).join("")}</div>
+      setRouteBody(`<div class="route-sort">${Object.entries(SORTS).map(([k,l])=>`<button class="chip ${sortBy===k?"on":""}" data-sort="${k}">${l}</button>`).join("")}</div>
         ${its.length?`<p class="route-count">${its.length} route${its.length===1?"":"s"}</p>`:""}
         ${its.map((it,i)=>`
         <button class="route-card" data-i="${i}">
@@ -614,9 +673,9 @@ views.map=(()=>{
         </button>`).join("")}
         ${loading?`<div class="empty-inline"><span class="spinner sm"></span>${its.length?"Looking for more routes…":"Finding shuttle, bus and MRT routes…"}</div>`:""}
         <p class="small-help">NUS shuttle times are live. Bus and MRT routes are from ${its.some(t=>t.source==="OneMap")?"OneMap (LTA) and Transitous":`LTA timetables via Transitous${oneMapStatus&&oneMapStatus!=="ok"?` (${esc(oneMapStatus)})`:""}`}; the first bus in a route shows its live arrival. Prefer a different route? Open it and tap Save as commute.</p>
-        ${footer()}`;
+        ${footer()}`);
       bindFooter();
-      $$(".route-card[data-i]",el).forEach(b=>b.onclick=()=>renderTransitDetail(its[+b.dataset.i]));
+      $$(".route-card[data-i]",el).forEach(b=>b.onclick=()=>{ listScroll=$("#mapPanel",el).scrollTop; slideNext="forward"; renderTransitDetail(its[+b.dataset.i]); });
       $$("[data-sort]",el).forEach(b=>b.onclick=()=>{ sortBy=b.dataset.sort; try{ localStorage.setItem("nus_route_sort",sortBy); }catch{} renderTransitList(); });
       if(its[0]) drawTransit(its[0]);
     }
@@ -645,7 +704,7 @@ views.map=(()=>{
       view="detail";
       const first=it.legs.find(l=>l.mode==="BUS"||l.mode==="SHUTTLE");
       peek(`${first?transitLabel(first):"Transit"} · ${walkMinutes(it.duration)} min · arrive ${clockTime(it.end)}`);
-      $("#routeBody",el).innerHTML=`
+      setRouteBody(`
         <button class="link" id="routeOptions">‹ All routes</button>
         <div class="route-summary"><b>${walkMinutes(it.duration)} min</b><span>arrive around ${clockTime(it.end)}</span></div>
         <ol class="itinerary">${it.legs.map((l,i)=>{
@@ -661,14 +720,17 @@ views.map=(()=>{
         <li class="it-end"><span class="it-dot end">${icon("M12 21s-7-6.2-7-11.5a7 7 0 0 1 14 0C19 14.8 12 21 12 21z",14)}</span><div><b>Arrive at ${esc(title)}</b><small>around ${clockTime(it.end)}</small></div></li>
         </ol>
         <button class="btn secondary full save-commute" id="saveCommute">${icon(PLACE_ICONS.star.path,16)}Save as commute</button>
-        ${footer("transit")}`;
+        ${footer("transit")}`);
       bindFooter(()=>transitPlan(it),()=>({kind:"transit",name:title,commute:commuteFromItinerary(it,{name:`To ${title}`,to:{name:title,lat:dest.lat,lng:dest.lng}})}));
       $("#saveCommute",el).onclick=()=>saveCommute(it,{name:title,lat:dest.lat,lng:dest.lng});
       $$("[data-pin-leg]",el).forEach(b=>b.onclick=()=>{
         const l=it.legs[+b.dataset.pinLeg];
         pinWidgetStop({code:l.from.code,name:l.from.name,lat:l.from.lat,lng:l.from.lng,nus:l.mode==="SHUTTLE"},b,{service:l.line,to:l.to.name});
       });
-      $("#routeOptions",el).onclick=()=>{ view="list"; renderTransitList(); };
+      $("#routeOptions",el).onclick=()=>{
+        view="list"; slideNext="back"; renderTransitList();
+        $("#mapPanel",el).scrollTop=listScroll; // back where you were in the list
+      };
       drawTransit(it);
       const showLive=async()=>{
         if(!first?.from.code) return;
