@@ -69,6 +69,7 @@ final class TripTracker: NSObject, CLLocationManagerDelegate {
     private var boarded = false
     private var alertedLeg = -1
     private var pathIndex = 0         // furthest point reached along a street leg
+    private var nearBoarding = false  // came within 150 m of the stop this walk leads to
     private var location: CLLocation?
     private var liveNext: Date?
     private var liveFetchedAt = Date.distantPast
@@ -268,6 +269,10 @@ final class TripTracker: NSObject, CLLocationManagerDelegate {
                 nextLeg()
             }
         } else if let loc = location {
+            // Already on the next bus or train, though GPS never put the user
+            // at the boarding stop (fixes near HDB blocks are often 30+ m off).
+            if distance(loc, leg.toLat, leg.toLng) < 150 { nearBoarding = true }
+            if let (i, stop) = boardedAhead(loc) { jumpOnto(i, at: stop); return }
             // Walking / cycling / driving: track progress along the path.
             if !leg.path.isEmpty {
                 let end = min(pathIndex + 40, leg.path.count)
@@ -285,10 +290,42 @@ final class TripTracker: NSObject, CLLocationManagerDelegate {
         }
     }
 
+    /// When walking to a stop: the next ride and the stop the user is at if
+    /// they're clearly on it already, either at one of its later stops or
+    /// moving at vehicle speed just past the boarding stop.
+    private func boardedAhead(_ loc: CLLocation) -> (Int, Int)? {
+        guard let plan, legIndex + 1 < plan.legs.count else { return nil }
+        let i = legIndex + 1, ride = plan.legs[i]
+        guard ride.stops.count >= 2 else { return nil }
+        let rail = !(ride.mode == "BUS" || ride.mode == "SHUTTLE")
+        let radius: Double = rail ? 120 : 60
+        // A later stop only counts after being near the boarding stop, in case
+        // the walk there runs along the bus route.
+        if nearBoarding, let stop = (1..<min(6, ride.stops.count)).last(where: { distance(loc, ride.stops[$0].lat, ride.stops[$0].lng) < radius }) {
+            return (i, stop)
+        }
+        let first = ride.stops[0], second = ride.stops[1]
+        let gap = distance(first.lat, first.lng, second.lat, second.lng)
+        if loc.speed > 5, distance(loc, first.lat, first.lng) < 350, distance(loc, second.lat, second.lng) < gap + 100 {
+            return (i, 0)
+        }
+        return nil
+    }
+
+    private func jumpOnto(_ index: Int, at stop: Int) {
+        log.info("On leg \(index) already (near stop \(stop))")
+        legIndex = index; progress = stop; boarded = true; pathIndex = 0; nearBoarding = false
+        if let b = behind, b.leg <= index { behind = nil }
+        liveNext = nil; liveFetchedAt = .distantPast
+        persist()
+        refreshLive()
+        push(force: true)
+    }
+
     private func nextLeg() {
         legIndex += 1
         log.info("Now on leg \(self.legIndex)")
-        progress = 0; boarded = false; pathIndex = 0
+        progress = 0; boarded = false; pathIndex = 0; nearBoarding = false
         liveNext = nil; liveFetchedAt = .distantPast
         if let b = behind, b.leg < legIndex { behind = nil }
         if let plan, legIndex >= plan.legs.count { finish(arrived: true); return }
@@ -383,12 +420,15 @@ final class TripTracker: NSObject, CLLocationManagerDelegate {
     /// can no longer be reached and the next one is 4+ minutes later.
     private func checkBehind(index: Int, leg: TripPlan.Leg, arrivals: [Double], reachIn: Double, catchable: Double?) {
         guard let c = catchable else { return }
+        // Moving at vehicle speed: most likely on that bus already.
+        if let loc = location, loc.speed > 4, Date().timeIntervalSince(loc.timestamp) < 60 { return }
         let nextAt = Date().addingTimeInterval(c * 60)
         guard let aim = baseline[index] else { baseline[index] = nextAt; return }
         guard nextAt.timeIntervalSince(aim) >= 240 else { return }
         let aimIn = aim.timeIntervalSinceNow
         // It has come and gone, or it's still on the board but out of reach.
-        let lost = aimIn < 60 || arrivals.contains { abs($0 * 60 - aimIn) < 120 && $0 * 60 < reachIn - 30 }
+        // Give boarding a minute to register before calling it missed.
+        let lost = aimIn < -60 || arrivals.contains { abs($0 * 60 - aimIn) < 120 && $0 * 60 < reachIn - 30 }
         guard lost else { return }
         let b = Behind(leg: index, line: leg.line, service: serviceName(leg), was: aim, next: nextAt)
         behind = b
