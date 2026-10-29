@@ -158,6 +158,7 @@
             archive:snapshot.archive||[],
             gpa:snapshot.gpa||{suLimit:32},
             commutes:snapshot.commutes||[],
+            busFavs:snapshot.busFavs||[],
             semester:snapshot.semester||{},
             clientUpdatedAt:Date.now(),
             updatedAt:window.firebase.firestore.FieldValue.serverTimestamp()

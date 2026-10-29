@@ -996,7 +996,7 @@ views.map=(()=>{
     return p.name!==p.code?`${placeKindLabel(p)} · ${p.name}`:placeKindLabel(p);
   }
 
-  function showResults(local,nearby,{query="",loading=false}={}){
+  function showResults(local,nearby,{query="",loading=false,scope=""}={}){
     const r=$("#mapResults",el);
     const rows=[...local,...nearby];
     r.hidden=false;
@@ -1007,7 +1007,7 @@ views.map=(()=>{
         ${p.distance!=null?`<span class="result-dist">${distanceLabel(p.distance)}</span>`:""}
       </button>`;
     r.innerHTML=local.map((p,i)=>row(p,i)).join("")
-      +(nearby.length?`<div class="result-head">Near this area</div>${nearby.map((p,i)=>row(p,local.length+i)).join("")}`:"")
+      +(nearby.length?`<div class="result-head">${esc(scope||"Near this area")}</div>${nearby.map((p,i)=>row(p,local.length+i)).join("")}`:"")
       +(loading?`<div class="result-status"><span class="spinner sm"></span>Searching nearby…</div>`:"")
       +(!loading&&nearby.length>1?`<button class="result-row more" id="showAllPins"><span class="result-icon">${icon("M12 21s-7-6.2-7-11.5a7 7 0 0 1 14 0C19 14.8 12 21 12 21z",16)}</span><span class="result-text"><b>Show all ${nearby.length} on map</b></span></button>`:"")
       +(!loading&&!rows.length&&query?`<div class="result-status">No results for “${esc(query)}”.</div>`:"");
@@ -1029,9 +1029,9 @@ views.map=(()=>{
     if(q.length<minLen) return;
     const c=map.getCenter();
     const nearby=await searchPlacesInArea(q,viewBounds(),{lat:c.lat,lng:c.lng},{
-      onPartial:rows=>{ if(input.value.trim()===q) showResults(local,rows.slice(0,15),{query:q,loading:true}); }});
+      onPartial:rows=>{ if(input.value.trim()===q) showResults(local,rows.slice(0,15),{query:q,loading:true,scope:rows.scope}); }});
     if(input.value.trim()!==q) return;
-    showResults(local,nearby.slice(0,15),{query:q});
+    showResults(local,nearby.slice(0,15),{query:q,scope:nearby.scope});
     if(pins && nearby.length) showPins(nearby,q);
   }
 

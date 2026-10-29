@@ -14,6 +14,7 @@ const TABS = [
   {name:"schedule", label:"Schedule", icon:"M7 3v3M17 3v3M4 8h16M5 5h14a1 1 0 0 1 1 1v13a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1z"},
   {name:"courses",  label:"Courses",  icon:"M4 19.5A2.5 2.5 0 0 1 6.5 17H20V3H6.5A2.5 2.5 0 0 0 4 5.5zM9 7h7M9 11h5"},
   {name:"tasks",    label:"Tasks",    icon:"M9 11l2 2 4-4M5 4h14a1 1 0 0 1 1 1v14a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1z"},
+  {name:"buses",    label:"Buses",    icon:"M8 6v6M16 6v6M2 12h20M7 18h.01M17 18h.01M6 3h12a3 3 0 0 1 3 3v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a3 3 0 0 1 3-3zM6 20v1M18 20v1"},
   {name:"map",      label:"Map",      icon:"M12 21s-7-6.2-7-11.5a7 7 0 0 1 14 0C19 14.8 12 21 12 21zM12 12a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5z"}
 ];
 // Settings (the "more" view and its pages) opens from the gear on Today.

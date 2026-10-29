@@ -151,6 +151,16 @@ final class TripTracker: NSObject, CLLocationManagerDelegate {
     }
     private static let walkSpeed = 1.3 // m/s
 
+    override init() {
+        super.init()
+        // "End trip" tapped on the island or lock screen (EndTripIntent).
+        NotificationCenter.default.addObserver(forName: .endTripFromIsland, object: nil, queue: .main) { [weak self] _ in
+            log.info("Trip ended from the island")
+            self?.finish(arrived: false)
+        }
+    }
+
+
     // MARK: Start / end
 
     func start(_ newPlan: TripPlan) throws {
@@ -230,6 +240,10 @@ final class TripTracker: NSObject, CLLocationManagerDelegate {
 
     private func tick() {
         guard plan != nil else { return }
+        // Ended outside the app (End trip on the island while the app wasn't listening).
+        if let activity, activity.activityState == .ended || activity.activityState == .dismissed {
+            finish(arrived: false); return
+        }
         if Date().timeIntervalSince(startedAt) > Self.maxTripLength { finish(arrived: false); return }
         advance()
         if Date().timeIntervalSince(liveFetchedAt) > 30 { refreshLive() }

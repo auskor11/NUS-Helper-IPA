@@ -737,25 +737,81 @@ function mergePlaceResults(q,lists){
 }
 
 // `onPartial` gets OneMap's results early when the other source is slower.
+/* "What + where" searches, like Google Maps: "mcdonald bukit batok" or
+ * "kopitiam near clementi" look for McDonald's / Kopitiam inside that area
+ * instead of finding the area itself. The area is a Singapore town or
+ * neighbourhood at the end of the search, or anything after "in", "near",
+ * "at" or "around". */
+const SG_AREAS=["admiralty","aljunied","ang mo kio","bartley","bayfront","beauty world","bedok","bedok north","bedok reservoir","bencoolen","bendemeer","bishan","boon keng","boon lay","botanic gardens","braddell","bras basah","buangkok","bugis","bukit batok","bukit gombak","bukit merah","bukit panjang","bukit timah","buona vista","caldecott","canberra","changi","changi airport","chinatown","chinese garden","choa chu kang","city hall","clarke quay","clementi","commonwealth","compassvale","dakota","dhoby ghaut","dover","downtown","east coast","esplanade","eunos","expo","farrer park","farrer road","fernvale","geylang","ghim moh","harbourfront","haw par villa","hillview","holland","holland village","hougang","jalan besar","joo koon","jurong","jurong east","jurong west","kaki bukit","kallang","katong","keat hong","kembangan","kent ridge","khatib","king albert park","kovan","kranji","lakeside","lavender","lentor","little india","lorong chuan","loyang","macpherson","marina bay","marine parade","marsiling","marymount","mattar","mountbatten","newton","nicoll highway","novena","one north","one-north","orchard","outram","pasir panjang","pasir ris","paya lebar","pioneer","potong pasir","punggol","queenstown","raffles place","redhill","rivervale","rochor","seletar","sembawang","sengkang","sentosa","serangoon","siglap","simei","sixth avenue","somerset","springleaf","stevens","tai seng","tampines","tan kah kee","tanah merah","tanjong pagar","tanjong katong","teck whye","telok ayer","telok blangah","tengah","thomson","tiong bahru","toa payoh","tuas","ubi","upper thomson","west coast","woodlands","woodleigh","yew tee","yio chu kang","yishun"];
+
+function splitAreaQuery(q){
+  const t=q.trim().replace(/\s+/g," ");
+  const m=t.match(/^(.+?)\s+(?:in|near|at|around)\s+(.+)$/i);
+  if(m&&m[1].length>=2) return {what:m[1],where:m[2]};
+  const words=t.split(" ");
+  for(let k=Math.min(3,words.length-1);k>=1;k--){
+    const where=words.slice(-k).join(" ").toLowerCase();
+    if(SG_AREAS.includes(where)) return {what:words.slice(0,-k).join(" "),where:words.slice(-k).join(" ")};
+  }
+  return null;
+}
+
+const areaBoundsCache=new Map();
+// {n,s,e,w,center,label} for an area name, from OpenStreetMap.
+async function geocodeArea(where){
+  const key=where.toLowerCase();
+  if(areaBoundsCache.has(key)) return areaBoundsCache.get(key);
+  const wait=1100-(Date.now()-lastNominatimAt);
+  if(wait>0) await new Promise(r=>setTimeout(r,wait));
+  lastNominatimAt=Date.now();
+  const params=new URLSearchParams({q:`${where}, Singapore`,format:"jsonv2",limit:"1",countrycodes:"sg"});
+  const x=(await getJSON(`https://nominatim.openstreetmap.org/search?${params}`,{timeout:8000}))?.[0];
+  if(!x?.boundingbox) return null;
+  let [s,n,w,e]=x.boundingbox.map(Number);
+  const center={lat:+x.lat,lng:+x.lon};
+  // Keep the area between about 1.5 km and 5.5 km across.
+  const clamp=(lo,hi,c,minHalf,maxHalf)=>{ const h=Math.min(maxHalf,Math.max(minHalf,(hi-lo)/2)); return [c-h,c+h]; };
+  [s,n]=clamp(s,n,center.lat,0.007,0.025); [w,e]=clamp(w,e,center.lng,0.007,0.025);
+  const area={n,s,e,w,center,label:where.replace(/\b\w/g,c=>c.toUpperCase())};
+  areaBoundsCache.set(key,area);
+  return area;
+}
+
 async function searchPlacesInArea(query,bounds,center,{min=8,onPartial=null}={}){
-  const q=String(query||"").trim();
+  let q=String(query||"").trim();
   if(q.length<2) return [];
+  // "mcdonald bukit batok": McDonald's inside Bukit Batok.
+  let area=null;
+  const split=splitAreaQuery(q);
+  if(split){
+    try{ area=await geocodeArea(split.where); }catch(err){ console.warn("Area lookup failed",err); }
+    if(area){ q=split.what; bounds=area; center=area.center; }
+  }
+  const inArea=p=>!area||(p.lat<=area.n+0.004&&p.lat>=area.s-0.004&&p.lng<=area.e+0.004&&p.lng>=area.w-0.004);
+  // In the area: places whose address names it first, then the rest, nearest first.
+  const named=p=>area&&`${p.name}`.toLowerCase().includes(area.label.toLowerCase())?0:1;
+  const scoped=rows=>{
+    if(!area) return rows;
+    const r=rows.filter(inArea).sort((a,b)=>named(a)-named(b)||a.distance-b.distance);
+    r.scope=`${q.replace(/^./,c=>c.toUpperCase())} in ${area.label}`;
+    return r;
+  };
   let done=false;
   const official=q.length>=3?searchPlacesOneMap(q,center).catch(err=>{ console.warn("OneMap search failed",err); return []; }):Promise.resolve([]);
-  official.then(rows=>{ if(!done&&rows.length) onPartial?.(mergePlaceResults(q,[rows])); });
+  official.then(rows=>{ const r=scoped(mergePlaceResults(q,[rows])); if(!done&&r.length) onPartial?.(r); });
   let rows=null;
   if(applePlaceSearch){
-    try{ rows=await searchPlacesApple(q,bounds,center,min); }
+    try{ rows=await searchPlacesApple(q,bounds,center,area?99:min); }
     catch(err){ console.warn("Apple Maps search failed",err); }
   }
-  if(!rows) rows=await searchPlacesOSM(q,bounds,center,{min});
-  const merged=mergePlaceResults(q,[rows,await official]);
+  if(!rows) rows=await searchPlacesOSM(q,bounds,center,{min,within:!!area});
+  const merged=scoped(mergePlaceResults(q,[rows,await official]));
   done=true;
   return merged;
 }
 
 // OpenStreetMap (Nominatim) search, for browsers.
-async function searchPlacesOSM(q,bounds,center,{min=8}={}){
+async function searchPlacesOSM(q,bounds,center,{min=8,within=false}={}){
   // Nominatim asks for at most one request a second.
   const run=async(viewbox,bounded)=>{
     const key=`${q.toLowerCase()}|${viewbox}|${bounded}`;
@@ -800,11 +856,12 @@ async function searchPlacesOSM(q,bounds,center,{min=8}={}){
   // Nominatim only returns many results for a bounded box, so widen in steps
   // and finish with the whole of Singapore.
   try{
-    for(const f of [1.2,4,12]){
+    // A named area ("… in Bukit Batok") is searched as it is, not widened.
+    for(const f of within?[1.1]:[1.2,4,12]){
       add(await run(box(bounds,f),true));
       if(matches().length>=min) break;
     }
-    if(matches().length<min) add(await run("103.59,1.48,104.10,1.20",true));
+    if(!within&&matches().length<min) add(await run("103.59,1.48,104.10,1.20",true));
   }catch(err){ console.warn("Area search failed",err); }
   // Addresses and areas don't contain the words; fall back to everything.
   const named=matches();

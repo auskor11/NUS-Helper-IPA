@@ -81,7 +81,7 @@ views.today=(()=>{
         <div class="today-col">
           ${commutesCardHTML()}
           <div class="card shuttle-card">
-            <div class="card-head"><h3>Nearby buses</h3><button class="link" id="shuttleMap">Map</button></div>
+            <div class="card-head"><h3>Nearby buses</h3><button class="link" data-go="buses">All stops</button></div>
             <div id="shuttleBody"><div class="empty-inline"><span class="spinner sm"></span>Finding stops near you…</div></div>
           </div>
           <div class="card">
@@ -93,7 +93,6 @@ views.today=(()=>{
 
     $("#todayBell",el).onclick=openReminders;
     $("#todayAddTask",el).onclick=()=>openTaskForm();
-    $("#shuttleMap",el).onclick=()=>go("map",shuttleStop?{stop:shuttleStop.code}:{});
     bindTaskRows(el);
     renderShuttles();
     fillCommuteCard(el);

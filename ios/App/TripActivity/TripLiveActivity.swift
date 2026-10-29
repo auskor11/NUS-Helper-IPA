@@ -43,6 +43,7 @@ struct TripLiveActivity: Widget {
                                 Text("Arrive \(s.eta, style: .time)").font(.caption).foregroundStyle(.secondary)
                             }
                         }
+                        if s.phase != "arrived" { EndTripButton() }
                     }
                     .padding(.horizontal, 6)
                 }
@@ -167,8 +168,22 @@ struct LockScreenTripView: View {
                     Text("Arrive \(state.eta, style: .time)").font(.subheadline).foregroundStyle(.white.opacity(0.75))
                 }
             }
+            if state.phase != "arrived" { EndTripButton() }
         }
         .padding(16)
+    }
+}
+
+/// Ends the trip without opening the app (EndTripIntent).
+struct EndTripButton: View {
+    var body: some View {
+        Button(intent: EndTripIntent()) {
+            Label("End trip", systemImage: "xmark.circle.fill")
+                .font(.caption.weight(.semibold))
+                .frame(maxWidth: .infinity)
+        }
+        .buttonStyle(.bordered)
+        .tint(.red)
     }
 }
 
