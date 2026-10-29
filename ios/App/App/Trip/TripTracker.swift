@@ -70,6 +70,10 @@ final class TripTracker: NSObject, CLLocationManagerDelegate {
     private var alertedLeg = -1
     private var pathIndex = 0         // furthest point reached along a street leg
     private var nearBoarding = false  // came within 150 m of the stop this walk leads to
+    /// For a few minutes after a trip starts, check whether the user is
+    /// already on one of its rides (trip started from the bus).
+    private var startCheckUntil = Date.distantPast
+    private var startScan: Bool { Date() < startCheckUntil }
     private var location: CLLocation?
     private var liveNext: Date?
     private var liveFetchedAt = Date.distantPast
@@ -135,6 +139,7 @@ final class TripTracker: NSObject, CLLocationManagerDelegate {
         legIndex = min(saved.legIndex, saved.plan.legs.count - 1)
         progress = 0; boarded = false; alertedLeg = -1; pathIndex = 0; behind = nil; baseline = [:]
         liveNext = nil; liveFetchedAt = .distantPast; lastPushed = current.content.state; lastPushAt = .distantPast
+        startCheckUntil = Date().addingTimeInterval(300)
         log.info("Trip restored to \(saved.plan.destination, privacy: .public) at leg \(self.legIndex)")
         startTracking()
     }
@@ -164,6 +169,7 @@ final class TripTracker: NSObject, CLLocationManagerDelegate {
         )
         lastPushed = state
         lastPushAt = Date()
+        startCheckUntil = Date().addingTimeInterval(300)
         log.info("Trip started to \(newPlan.destination, privacy: .public) with \(newPlan.legs.count) legs")
         persist()
         startTracking()
@@ -240,6 +246,10 @@ final class TripTracker: NSObject, CLLocationManagerDelegate {
         if leg.stops.count >= 2 {
             let stops = leg.stops
             let rail = !(leg.mode == "BUS" || leg.mode == "SHUTTLE")
+            if let loc = location, !boarded, startScan, let k = locateOnRide(loc, leg, full: true) {
+                progress = max(progress, k); boarded = true
+                log.info("Started on board leg \(self.legIndex) past stop \(k)")
+            }
             if let loc = location {
                 // Furthest stop within reach, searching a few stops ahead so a
                 // stray fix can't skip half the route.
@@ -290,26 +300,63 @@ final class TripTracker: NSObject, CLLocationManagerDelegate {
         }
     }
 
-    /// When walking to a stop: the next ride and the stop the user is at if
-    /// they're clearly on it already, either at one of its later stops or
-    /// moving at vehicle speed just past the boarding stop.
+    /// When walking to a stop: the ride the user is clearly on already, and
+    /// the stop they've passed. Normally only the next ride, and only after
+    /// being near its boarding stop or while moving at vehicle speed; just
+    /// after starting, any ride on the trip (a trip started from the bus,
+    /// planned with a boarding stop the bus has already passed).
     private func boardedAhead(_ loc: CLLocation) -> (Int, Int)? {
         guard let plan, legIndex + 1 < plan.legs.count else { return nil }
-        let i = legIndex + 1, ride = plan.legs[i]
-        guard ride.stops.count >= 2 else { return nil }
-        let rail = !(ride.mode == "BUS" || ride.mode == "SHUTTLE")
-        let radius: Double = rail ? 120 : 60
-        // A later stop only counts after being near the boarding stop, in case
-        // the walk there runs along the bus route.
-        if nearBoarding, let stop = (1..<min(6, ride.stops.count)).last(where: { distance(loc, ride.stops[$0].lat, ride.stops[$0].lng) < radius }) {
-            return (i, stop)
+        let rides = (legIndex + 1..<plan.legs.count).filter { plan.legs[$0].stops.count >= 2 }
+        if startScan {
+            for i in rides { if let k = locateOnRide(loc, plan.legs[i], full: true) { return (i, k) } }
+            return nil
         }
+        guard let i = rides.first, i == legIndex + 1 else { return nil }
+        let ride = plan.legs[i]
+        if nearBoarding || loc.speed > 4, let k = locateOnRide(loc, ride, full: false) { return (i, k) }
         let first = ride.stops[0], second = ride.stops[1]
         let gap = distance(first.lat, first.lng, second.lat, second.lng)
         if loc.speed > 5, distance(loc, first.lat, first.lng) < 350, distance(loc, second.lat, second.lng) < gap + 100 {
             return (i, 0)
         }
         return nil
+    }
+
+    /// The stop the user has reached or passed on a ride, if they're on it:
+    /// at one of its later stops, or on the stretch between two stops past
+    /// the boarding stop. `full` searches the whole ride, else the first few stops.
+    private func locateOnRide(_ loc: CLLocation, _ ride: TripPlan.Leg, full: Bool) -> Int? {
+        let stops = ride.stops
+        guard stops.count >= 2 else { return nil }
+        let rail = !(ride.mode == "BUS" || ride.mode == "SHUTTLE")
+        let radius: Double = rail ? 120 : 60
+        let end = full ? stops.count : min(6, stops.count)
+        var best: (index: Int, d: Double)?
+        for i in 1..<end {
+            let d = distance(loc, stops[i].lat, stops[i].lng)
+            if d < radius, d < (best?.d ?? .infinity) { best = (i, d) }
+        }
+        if let best { return best.index }
+        let moving = loc.speed > 3
+        for k in 0..<(end - 1) {
+            let (d, t) = offRoute(loc, stops[k], stops[k + 1])
+            // Someone on foot near the road isn't riding, so between stops
+            // it also takes vehicle speed (trains underground give no speed).
+            if d < (rail ? 150 : 45), t > 0.15, t < 0.98, moving || rail { return k }
+        }
+        return nil
+    }
+
+    /// Distance from the straight line between two stops, and how far along it (0…1).
+    private func offRoute(_ loc: CLLocation, _ a: TripPlan.Stop, _ b: TripPlan.Stop) -> (Double, Double) {
+        let mx = 111_320 * cos(a.lat * .pi / 180), my = 110_540.0
+        let bx = (b.lng - a.lng) * mx, by = (b.lat - a.lat) * my
+        let px = (loc.coordinate.longitude - a.lng) * mx, py = (loc.coordinate.latitude - a.lat) * my
+        let len2 = bx * bx + by * by
+        guard len2 > 1 else { return (hypot(px, py), 0) }
+        let t = max(0, min(1, (px * bx + py * by) / len2))
+        return (hypot(px - t * bx, py - t * by), t)
     }
 
     private func jumpOnto(_ index: Int, at stop: Int) {
