@@ -58,8 +58,8 @@ views.today=(()=>{
   function render(){
     const now=new Date();
     const items=itemsOnDate(now);
-    const overdue=state.tasks.filter(isOverdue);
-    const soon=state.tasks.filter(t=>!t.done&&!isOverdue(t)&&t.dueDate!==isoDate(now))
+    const overdue=allTaskItems().filter(isOverdue);
+    const soon=allTaskItems().filter(t=>!t.done&&!isOverdue(t)&&t.dueDate!==isoDate(now))
       .sort((a,b)=>taskDateTime(a)-taskDateTime(b)).slice(0,4);
     const reminders=currentReminders().length;
 

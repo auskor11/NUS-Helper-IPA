@@ -137,12 +137,20 @@ function confirmSheet(message, {confirm="Delete", danger=true}={}){
   });
 }
 
-function toast(msg){
+// toast("Saved") or toast("Done", {action:{label:"Add score", run(){…}}}).
+function toast(msg,{action=null}={}){
   const x=document.createElement("div");
   x.className="toast"; x.textContent=msg;
+  if(action){
+    const b=document.createElement("button");
+    b.className="toast-action"; b.textContent=action.label;
+    b.onclick=()=>{ x.remove(); action.run(); };
+    x.appendChild(b);
+  }
   document.body.appendChild(x);
-  setTimeout(()=>x.classList.add("hide"),2300);
-  setTimeout(()=>x.remove(),2700);
+  const life=action?4500:2300;
+  setTimeout(()=>x.classList.add("hide"),life);
+  setTimeout(()=>x.remove(),life+400);
 }
 
 /* ---------- Theme ---------- */

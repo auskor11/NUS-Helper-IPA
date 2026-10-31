@@ -1,19 +1,29 @@
-/* Tasks tab: tasks grouped by when they're due, one-tap complete, bulk delete. */
+/* Tasks tab: tasks grouped by when they're due, one-tap complete, bulk delete.
+ * Assessments you do yourself (online quizzes, assignments) appear here too
+ * (assessmentTasks in shared.js); ticking one marks the assessment done. */
 
 function dueLabel(t){
   const d=taskDateTime(t);
   const day=relativeDay(d);
-  return t.dueTime?`${day}, ${inputTimeToLabel(t.dueTime)}`:day;
+  const due=t.dueTime?`${day}, ${inputTimeToLabel(t.dueTime)}`:day;
+  if(t.assessment&&t.opens&&!t.done){
+    const now=new Date();
+    if(t.opens>now) return `Opens ${relativeDay(t.opens)}, ${clockTime(t.opens)}`;
+    if(taskDateTime(t)>now) return `Open now · due ${due}`;
+  }
+  return due;
 }
+
+const notOpenYet=t=>t.assessment&&!t.done&&t.opens&&t.opens>new Date();
 
 function taskRowHTML(t,{selecting=false,selected=false}={}){
   const over=isOverdue(t);
-  return `<div class="task-row ${t.done?"done":""} ${over?"overdue":""}">
+  return `<div class="task-row ${t.done?"done":""} ${over?"overdue":""} ${notOpenYet(t)?"not-open":""}">
     ${selecting
       ?`<button class="select-box ${selected?"on":""}" data-select-task="${esc(t.id)}" aria-label="Select ${esc(t.title)}"></button>`
       :`<button class="check ${t.done?"on":""}" data-toggle-task="${esc(t.id)}" aria-label="${t.done?"Mark not done":"Mark done"}: ${esc(t.title)}"></button>`}
     <div class="task-main" data-edit-task="${esc(t.id)}">
-      <b>${esc(t.title)}</b>
+      <b>${esc(t.title)}${t.assessment&&weightValue(t.weight)!=null?` <span class="assess-weight">${esc(weightLabel(t.weight))}</span>`:""}</b>
       <small>${t.module?`<span class="mod-tag">${esc(t.module)}</span>`:""}<span class="${over?"due-over":""}">${over?"Overdue · ":""}${esc(dueLabel(t))}</span></small>
     </div>
   </div>`;
@@ -23,16 +33,18 @@ function taskRowHTML(t,{selecting=false,selected=false}={}){
 function bindTaskRows(container){
   $$("[data-toggle-task]",container).forEach(b=>b.onclick=e=>{
     e.stopPropagation();
-    const t=state.tasks.find(x=>x.id===b.dataset.toggleTask);
+    const t=findTaskItem(b.dataset.toggleTask);
     if(!t) return;
+    if(t.assessment){ toggleAssessmentDone(t.code,t.index); return; }
     t.done=!t.done;
     b.classList.toggle("on",t.done);
     save();
     toast(t.done?"Done ✓":"Marked not done");
   });
   $$("[data-edit-task]",container).forEach(b=>b.onclick=()=>{
-    const t=state.tasks.find(x=>x.id===b.dataset.editTask);
-    if(t) openTaskForm(t);
+    const t=findTaskItem(b.dataset.editTask);
+    if(t?.assessment) openAssessmentSheet(t.code,t.index);
+    else if(t) openTaskForm(t);
   });
 }
 
@@ -82,7 +94,8 @@ views.tasks=(()=>{
   function groups(){
     const now=new Date(), today=isoDate(now), tomorrow=isoDate(addDays(now,1));
     const weekEnd=addDays(startOfWeek(now),7);
-    const list=state.tasks.filter(t=>filter==="done"?t.done:filter==="open"?!t.done:true)
+    // Tracked assessments can't be selected or deleted, only ticked off.
+    const list=(selecting?state.tasks:allTaskItems()).filter(t=>filter==="done"?t.done:filter==="open"?!t.done:true)
       .sort((a,b)=>filter==="done"?taskDateTime(b)-taskDateTime(a):taskDateTime(a)-taskDateTime(b));
     if(filter==="done") return [["Completed",list]];
     const g={Overdue:[],Today:[],Tomorrow:[],"This week":[],Later:[],Done:[]};
@@ -98,7 +111,7 @@ views.tasks=(()=>{
   }
 
   function render(){
-    const open=state.tasks.filter(t=>!t.done).length;
+    const open=allTaskItems().filter(t=>!t.done).length;
     const gs=groups();
     el.innerHTML=`
       ${pageHeader("Tasks",{

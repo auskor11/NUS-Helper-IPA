@@ -346,6 +346,68 @@ function activityOccursOnDate(a,date){
   return a.date===isoDate(date);
 }
 
+/* ---------- Assessments as tasks ----------
+ * Assessments you complete yourself within a window (online quizzes,
+ * assignments, projects, lab submissions) also show as tasks you can tick
+ * off. Exams and in-class tests sat at a set time don't. a.task (true/false)
+ * overrides the rule; a.done marks it completed. They stay one record in the
+ * syllabus, so nothing is copied or duplicated. */
+const TASK_ASSESSMENT_TYPES=["quiz","assignment","project","lab"];
+function isTaskAssessment(a){
+  if(!a?.date) return false;
+  if(a.task===true) return true;
+  if(a.task===false||a.official) return false;
+  return TASK_ASSESSMENT_TYPES.includes(a.type) && !(a.time&&a.endTime);
+}
+
+// When an assessment opens: a.opens ("YYYY-MM-DD" or "YYYY-MM-DDTHH:MM"),
+// else a note such as "Opens 00:00 the day before".
+function assessmentOpens(a){
+  if(a?.opens){
+    const d=new Date(String(a.opens).includes("T")?`${a.opens}:00`:`${a.opens}T00:00:00`);
+    return isNaN(d)?null:d;
+  }
+  const m=String(a?.notes||"").match(/\bopens?\s+(?:at\s+)?(\d{1,2})[:.]?(\d{2})(?:\s*(am|pm))?(?:\s+(?:on\s+)?(?:the\s+)?(day before|(\d+)\s+days?\s+before))?/i);
+  if(!m||!a.date) return null;
+  let h=+m[1];
+  if(m[3]){ if(/pm/i.test(m[3])&&h<12) h+=12; if(/am/i.test(m[3])&&h===12) h=0; }
+  const d=new Date(`${a.date}T00:00:00`);
+  d.setDate(d.getDate()-(m[4]?(m[5]?+m[5]:1):0));
+  d.setHours(h,+m[2],0,0);
+  return isNaN(d)?null:d;
+}
+
+// Your tick decides; an assessment you've never ticked counts as done once it has a score.
+const assessmentDone=a=>a.done??(a.score!=null);
+
+// Tracked assessments as task-shaped items for the Tasks tab and Today.
+function assessmentTasks(){
+  const out=[];
+  for(const m of state.syllabus?.modules||[]){
+    (m.assessments||[]).forEach((a,i)=>{
+      if(!isTaskAssessment(a)) return;
+      out.push({id:`assess|${m.code}|${i}`,assessment:true,ref:a,code:m.code,index:i,title:a.title,module:m.code,
+        dueDate:a.date,dueTime:a.time||"23:59",done:assessmentDone(a),weight:a.weight,opens:assessmentOpens(a)});
+    });
+  }
+  return out;
+}
+
+// Ones already past when they first become tasks (when this arrived, or in a
+// newly imported syllabus) were done before the app could track them.
+function markPastAssessmentsDone(modules){
+  const now=new Date();
+  for(const m of modules||[]) for(const a of m.assessments||[]){
+    if(a.done==null&&isTaskAssessment(a)&&new Date(`${a.date}T${a.time||"23:59"}:00`)<now) a.done=true;
+  }
+}
+
+// Your tasks plus tracked assessments.
+function allTaskItems(){ return [...state.tasks,...assessmentTasks()]; }
+function findTaskItem(id){
+  return String(id).startsWith("assess|") ? assessmentTasks().find(t=>t.id===id) : state.tasks.find(t=>t.id===id);
+}
+
 function taskDateTime(t){
   return new Date(`${t.dueDate}T${t.dueTime || "23:59"}:00`);
 }
@@ -448,7 +510,7 @@ function buildNotificationItems(){
   // Dated assessments from the syllabus (app/syllabus.js).
   for(const m of state.syllabus?.modules||[]){
     for(const a of m.assessments||[]){
-      if(!a.date) continue;
+      if(!a.date||(isTaskAssessment(a)&&assessmentDone(a))) continue;   // ticked off in Tasks: no more reminders
       const at=new Date(`${a.date}T${a.time||"23:59"}:00`).getTime();
       const nine=new Date(`${a.date}T09:00:00`).getTime();
       if(!Number.isFinite(at) || at<now) continue;
@@ -461,6 +523,9 @@ function buildNotificationItems(){
       add(`${key}-1d`,what,`${a.venue?`${a.venue} · `:""}tomorrow`,nine-86400000,"Assessment · 1 day",href,when);
       const dayOf=a.time?at-2*3600000:nine;
       add(`${key}-day`,what,a.time?`${a.venue?`${a.venue} · `:""}in 2 hours`:"today",dayOf,"Assessment · today",href,when);
+      // Ones you do yourself: when the window opens.
+      const opens=isTaskAssessment(a)?assessmentOpens(a):null;
+      if(opens&&opens.getTime()>now) add(`${key}-open`,what,`is open · due ${when}`,opens.getTime(),"Assessment · open now",href,when);
     }
   }
 

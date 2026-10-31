@@ -49,13 +49,13 @@ function allAssessments(){
   const start=semesterStart();
   const rows=[];
   for(const m of state.syllabus?.modules||[]){
-    for(const a of m.assessments||[]){
+    for(const [index,a] of (m.assessments||[]).entries()){
       let when=a.date?new Date(`${a.date}T${a.time||"23:59"}:00`):null;
       if(!when && start && typeof a.week==="number"){
         const i=a.week<=6?a.week-1:a.week; // week 7 starts after recess
         when=addDays(start,i*7+4); when.setHours(23,59,0,0); // that week's Friday
       }
-      rows.push({...a,module:m.code,when});
+      rows.push({...a,module:m.code,when,index});
     }
   }
   return rows.sort((a,b)=>(a.when?.getTime()??Infinity)-(b.when?.getTime()??Infinity));
@@ -104,6 +104,7 @@ ${calendar}- Dates are YYYY-MM-DD and times are 24-hour HH:MM (Singapore time). 
 - "Best N of M" rules: give each item its own weight, the same "group" name and "best": N (e.g. 4 quizzes at 8% each, best 3 count). Weights then add up to 100 once only the best N of each group are counted.
 - "lecture", "tutorial", "recitation" and "lab" match NUSMods lesson types. If a module names them differently (e.g. Studio is the tutorial, Reflection is the recitation), use the closest field and keep the module's own name in the text. If there are two lectures a week, put both in "lecture", e.g. "Wed: L9A Environment Model · Fri: L9B Lists and Loops II".
 - "type" is one of: ${ASSESSMENT_TYPES.join(", ")}.
+- For anything done in a window rather than at a set time (online quizzes, assignments, projects), give the deadline as "date" and "time" and when it opens as "opens" (YYYY-MM-DD or YYYY-MM-DDTHH:MM), if the sources say.
 - Keep each text short (one line). Leave out any field the sources don't say; don't guess.
 - One entry per module code, with every week that has content. Only include modules you were given materials for; leave out any module with no materials (don't add empty entries).${codes?`\n- For reference, my modules this semester are: ${codes}.`:""}`;
 }
@@ -162,11 +163,14 @@ function importSyllabus(modules){
   for(const m of modules) if(targets.has(m.code)&&m.target==null) m.target=targets.get(m.code);
   for(const m of state.syllabus?.modules||[]) for(const a of m.assessments||[]){
     if(a.score!=null) scores.set(key(m.code,a.title),{score:a.score,scoreText:a.scoreText});
+    // Ticks and "Show in Tasks" choices survive a re-import too.
+    if(a.done!=null||a.task!=null) scores.set(key(m.code,a.title),{...scores.get(key(m.code,a.title)),...(a.done!=null?{done:a.done}:{}),...(a.task!=null?{task:a.task}:{})});
     if(a.official&&a.venue) examVenues.set(m.code,a.venue);
   }
   for(const m of modules) for(const a of m.assessments) Object.assign(a,scores.get(key(m.code,a.title))||{});
+  markPastAssessmentsDone(modules);
   state.syllabus={modules:[...(state.syllabus?.modules||[]).filter(m=>!codes.has(m.code)),...modules]
-    .sort((a,b)=>a.code.localeCompare(b.code)),importedAt:Date.now()};
+    .sort((a,b)=>a.code.localeCompare(b.code)),importedAt:Date.now(),assessTasksAt:Date.now()};
   // Put the official exam times (app/exams.js) and your exam venues back.
   refreshExams({force:true}).then(()=>{
     let changed=false;
@@ -235,14 +239,15 @@ function assessmentRowHTML(a,{showModule=true}={}){
   const now=new Date(), past=a.when&&a.when<now;
   const days=a.when?Math.ceil((new Date(a.when).setHours(0,0,0,0)-new Date().setHours(0,0,0,0))/86400000):null;
   const countdown=past?"Done":days==null?"":days===0?"Today":days===1?"Tomorrow":`In ${days} days`;
-  return `<div class="assess-row t-${esc(a.type)} ${past?"past":""}">
-    <span class="assess-bar"></span>
+  const tick=isTaskAssessment(a);
+  return `<div class="assess-row t-${esc(a.type)} ${past&&!tick?"past":""} ${tick&&assessmentDone(a)?"done":""}" data-assess-open="${esc(a.module)}|${a.index}">
+    ${tick?`<button class="check ${assessmentDone(a)?"on":""}" data-assess-toggle="${esc(a.module)}|${a.index}" aria-label="${assessmentDone(a)?"Mark not done":"Mark done"}: ${esc(a.title)}"></button>`:`<span class="assess-bar"></span>`}
     <div class="assess-main">
       <b>${showModule?`<span class="mod-tag">${esc(a.module)}</span>`:""}${esc(a.title)}${weightValue(a.weight)!=null?` <span class="assess-weight">${esc(weightLabel(a.weight))}</span>`:""}</b>
       <small>${esc(assessmentWhen(a))}${a.venue?` · ${esc(a.venue)}`:""}</small>
       ${a.notes?`<small class="assess-notes">${esc(a.notes)}</small>`:""}
     </div>
-    ${countdown?`<span class="assess-count ${days!=null&&days>=0&&days<=7&&!past?"soon":""}">${countdown}</span>`:""}
+    ${tick&&assessmentDone(a)?`<span class="assess-count">Done</span>`:countdown?`<span class="assess-count ${days!=null&&days>=0&&days<=7&&!past?"soon":""}">${tick&&past?"Overdue":countdown}</span>`:""}
   </div>`;
 }
 
@@ -263,6 +268,44 @@ function outlineWeekInfo(key){
 function syllabusLinesHTML(w){
   const line=(label,text)=>text?`<div class="syl-line"><span>${label}</span><p>${esc(text)}</p></div>`:"";
   return [line("Lecture",w.lecture),line("Tutorial",w.tutorial),line("Recitation",w.recitation),line("Lab",w.lab),line("Readings",w.readings),line("Notes",w.notes)].join("");
+}
+
+/* ---------- One assessment ---------- */
+
+// Ticks an assessment you do yourself on or off (also from the Tasks tab).
+function toggleAssessmentDone(code,i){
+  const m=syllabusModule(code), a=m?.assessments?.[i];
+  if(!a) return;
+  a.done=!assessmentDone(a);
+  save();
+  if(a.done&&weightValue(a.weight)!=null&&a.score==null) toast("Done ✓",{action:{label:"Add score",run:()=>openScoreSheet(code,i)}});
+  else toast(a.done?"Done ✓":"Marked not done");
+}
+
+function openAssessmentSheet(code,i){
+  const m=syllabusModule(code), a=m?.assessments?.[i];
+  if(!a) return;
+  const tick=isTaskAssessment(a), opens=assessmentOpens(a), w=weightValue(a.weight);
+  openModal(`<p class="kicker">${esc(code)}${w!=null?` · ${esc(weightLabel(a.weight))} OF FINAL GRADE`:""}</p><h2>${esc(a.title)}</h2>
+    <div class="assess-facts">
+      ${opens?`<div><span>Opens</span><b>${esc(opens.toLocaleDateString("en-SG",{weekday:"short",day:"numeric",month:"short"}))}, ${esc(clockTime(opens))}</b></div>`:""}
+      <div><span>${tick?"Due":"When"}</span><b>${esc(assessmentWhen(a))}</b></div>
+      ${a.venue?`<div><span>Venue</span><b>${esc(a.venue)}</b></div>`:""}
+      ${a.score!=null?`<div><span>Score</span><b>${esc(a.scoreText||pctText(a.score))}</b></div>`:""}
+    </div>
+    ${a.notes?`<p class="subtle">${esc(a.notes)}</p>`:""}
+    ${a.date?`<label class="switch-row"><span><b>Show in Tasks</b><small>Tick it off when you've done it. Reminders stop once it's done.</small></span>
+      <input type="checkbox" id="assessTrack" ${tick?"checked":""}></label>`:""}
+    <div class="sheet-actions">
+      ${tick?`<button class="btn ${assessmentDone(a)?"secondary":"primary"} full" id="assessDone">${assessmentDone(a)?"Mark not done":"Mark done"}</button>`:""}
+      ${w!=null?`<button class="btn secondary full" id="assessScore">${a.score!=null?"Edit score":"Add score"}</button>`:""}
+    </div>`);
+  $("#assessTrack")?.addEventListener("change",e=>{
+    a.task=e.target.checked;
+    save(); closeModal(); toast(a.task?"Added to Tasks":"Removed from Tasks");
+  });
+  $("#assessDone")?.addEventListener("click",()=>{ closeModal(); toggleAssessmentDone(code,i); });
+  $("#assessScore")?.addEventListener("click",()=>{ closeModal(); setTimeout(()=>openScoreSheet(code,i),50); });
 }
 
 /* ---------- Grades ---------- */
@@ -425,6 +468,8 @@ function openScoreSheet(code,i){
 function bindSyllabusActions(el){
   $$("[data-grade]",el).forEach(b=>b.onclick=()=>{ const [code,i]=b.dataset.grade.split("|"); openScoreSheet(code,+i); });
   $$("[data-target]",el).forEach(b=>b.onclick=()=>openTargetSheet(b.dataset.target));
+  $$("[data-assess-toggle]",el).forEach(b=>b.onclick=e=>{ e.stopPropagation(); const [code,i]=b.dataset.assessToggle.split("|"); toggleAssessmentDone(code,+i); });
+  $$("[data-assess-open]",el).forEach(b=>b.onclick=()=>{ const [code,i]=b.dataset.assessOpen.split("|"); openAssessmentSheet(code,+i); });
   $$("[data-syl=help]",el).forEach(b=>b.onclick=openSyllabusHelp);
   $$("[data-syl=import]",el).forEach(b=>b.onclick=openSyllabusImporter);
   $$("[data-syl=clear]",el).forEach(b=>b.onclick=async()=>{
@@ -433,6 +478,14 @@ function bindSyllabusActions(el){
     save({immediate:true}); toast("Syllabus removed");
   });
 }
+
+// The first time assessments show as tasks, ones already past count as done.
+window.addEventListener("nus-cloud-state-applied",()=>{
+  if(!state.syllabus?.modules?.length||state.syllabus.assessTasksAt) return;
+  markPastAssessmentsDone(state.syllabus.modules);
+  state.syllabus.assessTasksAt=Date.now();
+  save({immediate:true}).catch(err=>console.warn("Couldn't mark past assessments done",err));
+});
 
 // Earlier versions copied dated assessments into Tasks. Assessments are now
 // their own thing, so remove those copies once the account's data has loaded.
