@@ -50,23 +50,32 @@ async function getJSON(url,{native=false,timeout=12000,headers={}}={}){
 
 const NEXTBUS_SITE="https://bus.hewliyang.com";
 
-// NUS shuttle arrivals from NUS NextBus (bus.hewliyang.com).
-// Returns [{service, next, then}] where next/then are minutes or null.
-// When NUS's NextBus server is down every shuttle source fails (e.g. its security
-// certificate expired on 23 Oct 2026), so say so rather than a vague error.
+// NUS shuttle arrivals. NUS has no official public feed, so these come from
+// community proxies of NUS's own NextBus backend, tried in order until one
+// answers. Returns [{service, times:[minutes], ...}]. When they all fail
+// (NUS's backend is down, e.g. its certificate expired on 23 Oct 2026), say so.
 const SHUTTLE_DOWN="NUS's live shuttle times are down right now (a problem with NUS's NextBus server). They'll come back on their own.";
-async function loadShuttleArrivals(code){
-  let data;
-  try{ data=await getJSON(`${NEXTBUS_SITE}/api/stop/${encodeURIComponent(code)}`,{native:true}); }
-  catch(err){
-    // Offline, or in a browser (which can't reach the shuttle API at all): not NUS's server.
-    if(navigator.onLine===false||!isNativeApp()) throw err;
-    const e=new Error(SHUTTLE_DOWN); e.shuttleDown=true; e.cause=err; throw e;
+
+// nusbus.app: {ShuttleServiceResult:{shuttles:[{name,_etas:[{eta}],arrivalTime,nextArrivalTime}]}}.
+// Each _etas entry is one upcoming bus in minutes; pool per service and keep the soonest three.
+function parseNusbusShuttle(data){
+  const r=data?.ShuttleServiceResult;
+  if(!r||!Array.isArray(r.shuttles)) return null;
+  const byService=new Map();
+  for(const sh of r.shuttles){
+    const list=byService.get(sh.name)||[];
+    let any=false;
+    for(const e of sh._etas||[]){ const m=Number(e.eta); if(Number.isFinite(m)){ list.push(m); any=true; } }
+    if(!any) for(const k of ["arrivalTime","nextArrivalTime"]){ const m=parseInt(sh[k],10); if(Number.isFinite(m)) list.push(m); }
+    byService.set(sh.name,list);
   }
-  if(!data?.etas){ const e=new Error(SHUTTLE_DOWN); e.shuttleDown=true; throw e; }
+  return [...byService].map(([service,list])=>etaRow(service,list,"nus")).sort(byNextArrival);
+}
+
+// bus.hewliyang.com: {etas:{timings:[{name,arrivalTime,nextArrivalTime}]}} (two times per row).
+function parseHewliyangShuttle(data){
+  if(!data?.etas) return null;
   const mins=v=>{ const n=parseInt(v,10); return Number.isFinite(n)?n:null; };
-  // Each row gives two times. A service can be listed twice (e.g. two loops
-  // calling here), so pool every time per service and keep the soonest three.
   const byService=new Map();
   for(const t of data?.etas?.timings||[]){
     const list=byService.get(t.name)||[];
@@ -74,6 +83,25 @@ async function loadShuttleArrivals(code){
     byService.set(t.name,list);
   }
   return [...byService].map(([service,list])=>etaRow(service,list,"nus")).sort(byNextArrival);
+}
+
+const SHUTTLE_SOURCES=[
+  {url:code=>`https://nusbus.app/api/shuttle-service?busstopname=${encodeURIComponent(code)}`, parse:parseNusbusShuttle},
+  {url:code=>`${NEXTBUS_SITE}/api/stop/${encodeURIComponent(code)}`, parse:parseHewliyangShuttle},
+];
+
+async function loadShuttleArrivals(code){
+  let lastErr=null;
+  for(const src of SHUTTLE_SOURCES){
+    let data;
+    try{ data=await getJSON(src.url(code),{native:true,timeout:9000}); }
+    catch(err){ lastErr=err; continue; }
+    const rows=src.parse(data);       // null = this source gave an unexpected shape; try the next
+    if(rows) return rows;             // a valid result (even empty: no buses right now)
+  }
+  // Offline, or in a browser (which can't reach the shuttle proxies): our side, not NUS's.
+  if(navigator.onLine===false||!isNativeApp()) throw lastErr||new Error("Live shuttle times unavailable.");
+  const e=new Error(SHUTTLE_DOWN); e.shuttleDown=true; e.cause=lastErr; throw e;
 }
 
 // Singapore public bus arrivals from arrivelah (BusRouter SG).
