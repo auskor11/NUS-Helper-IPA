@@ -52,8 +52,18 @@ const NEXTBUS_SITE="https://bus.hewliyang.com";
 
 // NUS shuttle arrivals from NUS NextBus (bus.hewliyang.com).
 // Returns [{service, next, then}] where next/then are minutes or null.
+// When NUS's NextBus server is down every shuttle source fails (e.g. its security
+// certificate expired on 23 Oct 2026), so say so rather than a vague error.
+const SHUTTLE_DOWN="NUS's live shuttle times are down right now (a problem with NUS's NextBus server). They'll come back on their own.";
 async function loadShuttleArrivals(code){
-  const data=await getJSON(`${NEXTBUS_SITE}/api/stop/${encodeURIComponent(code)}`,{native:true});
+  let data;
+  try{ data=await getJSON(`${NEXTBUS_SITE}/api/stop/${encodeURIComponent(code)}`,{native:true}); }
+  catch(err){
+    // Offline, or in a browser (which can't reach the shuttle API at all): not NUS's server.
+    if(navigator.onLine===false||!isNativeApp()) throw err;
+    const e=new Error(SHUTTLE_DOWN); e.shuttleDown=true; e.cause=err; throw e;
+  }
+  if(!data?.etas){ const e=new Error(SHUTTLE_DOWN); e.shuttleDown=true; throw e; }
   const mins=v=>{ const n=parseInt(v,10); return Number.isFinite(n)?n:null; };
   // Each row gives two times. A service can be listed twice (e.g. two loops
   // calling here), so pool every time per service and keep the soonest three.
@@ -134,7 +144,7 @@ async function arrivalsHTML(stop,{embed=true}={}){
       return `<iframe class="nextbus-frame" title="NUS NextBus" src="${NEXTBUS_SITE}/stop/${encodeURIComponent(stop.code)}" referrerpolicy="no-referrer"></iframe>`;
     }
     console.warn("Arrivals failed",err);
-    return `<div class="empty-inline">Live times unavailable right now. Tap refresh to try again.</div>`;
+    return `<div class="empty-inline">${err.shuttleDown?esc(SHUTTLE_DOWN):"Live times unavailable right now. Tap refresh to try again."}</div>`;
   }
 }
 
@@ -200,6 +210,23 @@ function loadPublicStops(){
     ).catch(err=>{ console.warn("Public bus stops unavailable",err); publicStopsPromise=null; return []; });
   }
   return publicStopsPromise;
+}
+
+// NUS shuttle stops that share a spot with a public bus stop (each the other's nearest stop,
+// within 45 m, so stops on opposite sides of a road stay apart): nus code -> public stop.
+let stopPairsPromise=null;
+function sharedStops(){
+  return stopPairsPromise??=loadPublicStops().then(pub=>{
+    const byNus=new Map(), byPub=new Map();
+    for(const n of NUS_STOPS){
+      let best=null,bd=Infinity;
+      for(const p of pub){ const d=distanceM(n,p); if(d<bd){bd=d;best=p;} }
+      if(!best||bd>45) continue;
+      const back=NUS_STOPS.reduce((a,x)=>distanceM(x,best)<distanceM(a,best)?x:a);
+      if(back.code===n.code){ byNus.set(n.code,best); byPub.set(best.code,n.code); }
+    }
+    return {byNus,byPub};
+  });
 }
 
 async function publicStopNear(pos,maxM=45){

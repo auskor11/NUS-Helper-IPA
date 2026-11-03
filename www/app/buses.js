@@ -1,4 +1,7 @@
 /* Buses tab: live arrivals like SingaBus. A map of bus stops on top and a
+ * NUS shuttle stop that shares a spot with a public stop (Central Library, IT, YIH…) is one
+ * stop with both boards together (sharedStops in places.js): {type:"nus", …, pub: public stop}.
+ *
  * sheet of stops below: starred stops first, then the stops in the area the
  * map shows (near you to begin with), each with every service's next three
  * buses, deck type and how full they are. Tap a stop (pin or card) for its
@@ -10,13 +13,20 @@
 
 views.buses=(()=>{
   let el=null, timer=null, map=null, base=null, baseStyle="", pins=null, routeLayer=null, meMarker=null;
-  let pos=null, area=null, searched=null, selected=null, service=null, sheetH=null;
+  let pos=null, area=null, searched=null, selected=null, service=null, sheetH=null, pairs=null;
   const open=new Set();      // keys of boards that are expanded
   const loaded=new Map();    // key -> last board HTML, so re-renders don't flash
   const boards=new Map();    // key -> last arrival rows (for live bus positions)
   const keyOf=s=>`${s.type}:${s.code}`;
-  const isFav=s=>(state.busFavs||[]).some(f=>keyOf(f)===keyOf(s));
+  const isFav=s=>(state.busFavs||[]).some(f=>keyOf(f)===keyOf(s)||(s.pub&&f.type==="public"&&f.code===s.pub.code));
   const wide=()=>matchMedia("(min-width:900px)").matches;
+  // One stop for a shuttle stop and the public stop sharing its spot (either one given).
+  const merged=s=>{
+    if(!pairs||!s) return s;
+    if(s.type==="public"&&pairs.byPub.has(s.code)){ const n=NUS_STOPS.find(x=>x.code===pairs.byPub.get(s.code)); return n?{...n,pub:pairs.byNus.get(n.code),distance:s.distance}:s; }
+    if(s.type==="nus"&&!s.pub&&pairs.byNus.has(s.code)) return {...s,pub:pairs.byNus.get(s.code)};
+    return s;
+  };
   const BUS_ICON="M8 6v6M16 6v6M2 12h20M7 18h.01M17 18h.01M6 3h12a3 3 0 0 1 3 3v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a3 3 0 0 1 3-3z";
 
   /* ---------- Map ---------- */
@@ -57,7 +67,7 @@ views.buses=(()=>{
   }
 
   const pinIcon=(s,{on=false,fav=false}={})=>L.divIcon({className:"",iconSize:on?[34,34]:[26,26],iconAnchor:on?[17,17]:[13,13],
-    html:`<div class="bus-pin ${s.type} ${on?"on":""} ${fav?"fav":""}">${icon(BUS_ICON,on?16:12)}</div>`});
+    html:`<div class="bus-pin ${s.type} ${s.pub?"both":""} ${on?"on":""} ${fav?"fav":""}">${icon(BUS_ICON,on?16:12)}</div>`});
 
   // Pins for the stops in the list (and the selected one), the selected stop bigger.
   function drawPins(){
@@ -65,7 +75,7 @@ views.buses=(()=>{
     pins.clearLayers();
     if(service) return;   // a service on the map shows its own stops
     const seen=new Set();
-    for(const s of [...(area?.stops||[]),...(state.busFavs||[]),...(searched?[searched]:[])]){
+    for(const s of [...(area?.stops||[]),...(state.busFavs||[]).map(merged),...(searched?[searched]:[])]){
       const k=keyOf(s); if(seen.has(k)) continue; seen.add(k);
       const on=selected&&keyOf(selected)===k;
       L.marker([s.lat,s.lng],{icon:pinIcon(s,{on,fav:isFav(s)}),zIndexOffset:on?900:0,title:s.name})
@@ -97,8 +107,9 @@ views.buses=(()=>{
   /* ---------- Stops in the area ---------- */
 
   async function stopsAround(c){
-    const nus=nearestNusStops(c,6).filter(s=>s.distance<800);
-    const pub=(await loadPublicStops()).map(s=>({...s,distance:distanceM(c,s)})).filter(s=>s.distance<600).sort((a,b)=>a.distance-b.distance).slice(0,10);
+    pairs=await sharedStops();
+    const nus=nearestNusStops(c,6).filter(s=>s.distance<800).map(merged);
+    const pub=(await loadPublicStops()).filter(s=>!pairs.byPub.has(s.code)).map(s=>({...s,distance:distanceM(c,s)})).filter(s=>s.distance<600).sort((a,b)=>a.distance-b.distance).slice(0,10);
     return [...nus,...pub].sort((a,b)=>a.distance-b.distance).slice(0,12);
   }
 
@@ -124,7 +135,8 @@ views.buses=(()=>{
 
   /* ---------- A stop ---------- */
 
-  function selectStop(s,{fromMap=false}={}){
+  function selectStop(s0,{fromMap=false}={}){
+    const s=merged(s0);
     selected=s; service=null; clearRoute();
     open.add(keyOf(s));
     if(!(area?.stops||[]).some(x=>keyOf(x)===keyOf(s))&&!isFav(s)) searched=s;
@@ -133,15 +145,28 @@ views.buses=(()=>{
     requestAnimationFrame(()=>$(`.bus-card[data-key="${CSS.escape(keyOf(s))}"]`,el)?.scrollIntoView({block:"nearest",behavior:"smooth"}));
   }
 
+  // Arrivals at a stop: shuttles and/or public buses, soonest first. shuttleErr says why
+  // shuttle times are missing (NUS's server down, or blocked in a browser).
+  async function stopRows(s){
+    const rows=[]; let shuttleErr=null, pubErr=null;
+    await Promise.all([
+      s.type==="nus"&&loadShuttleArrivals(s.code).then(r=>rows.push(...r)).catch(e=>{ shuttleErr=e; }),
+      (s.type==="public"||s.pub)&&loadPublicArrivals(s.type==="public"?s.code:s.pub.code).then(r=>rows.push(...r)).catch(e=>{ pubErr=e; })
+    ]);
+    if(!rows.length&&(shuttleErr||pubErr)&&!(shuttleErr&&s.pub&&!pubErr)) throw shuttleErr||pubErr;
+    return {rows:rows.sort(byNextArrival),shuttleErr};
+  }
+
   async function loadBoard(s){
     const k=keyOf(s);
     let html;
     try{
-      const rows=s.type==="nus"?await loadShuttleArrivals(s.code):await loadPublicArrivals(s.code);
+      const {rows,shuttleErr}=await stopRows(s);
       boards.set(k,rows);
-      html=rows.length?etaRowsHTML(rows,{tap:true}):`<div class="empty-inline">No buses right now.</div>`;
+      const note=shuttleErr?`<p class="bus-note">${esc(shuttleErr.shuttleDown?SHUTTLE_DOWN:"NUS shuttle times unavailable right now.")}${rows.length?" Public buses are shown.":""}</p>`:"";
+      html=(rows.length?etaRowsHTML(rows,{tap:true}):`<div class="empty-inline">No buses right now.</div>`)+note;
     }catch(err){
-      html=s.type==="nus"&&!isNativeApp()?await arrivalsHTML(s,{embed:true}):`<div class="empty-inline">Live times unavailable right now. Tap refresh to try again.</div>`;
+      html=s.type==="nus"&&!isNativeApp()&&!err.shuttleDown?await arrivalsHTML(s,{embed:true}):`<div class="empty-inline">${esc(err.shuttleDown?SHUTTLE_DOWN:"Live times unavailable right now. Tap refresh to try again.")}</div>`;
     }
     loaded.set(k,`${html}<p class="bus-updated">Updated ${clockTime(new Date())}${boards.get(k)?.length?" · tap a bus for its route":""}</p>`);
     $$(`[data-body="${CSS.escape(k)}"]`,el).forEach(b=>{ b.innerHTML=loaded.get(k); bindRows(b,s); });
@@ -172,7 +197,7 @@ views.buses=(()=>{
     try{
       const rows=boards.get(keyOf(stop))||[];
       const row=rows.find(r=>String(r.service)===String(svcNo));
-      if(stop.type==="nus"){
+      if(row?row.kind==="nus":stop.type==="nus"){
         const codes=SHUTTLE_ROUTES[svcNo]||[];
         const at=codes.indexOf(stop.code);
         const seq=at>=0?[...codes.slice(0,at+1)]:codes;
@@ -182,13 +207,13 @@ views.buses=(()=>{
         const [svcs,lines,all]=await Promise.all([loadBusServices(),loadBusRouteLines(),loadPublicStops()]);
         const svc=svcs[svcNo];
         if(!svc) throw new Error("No route for this service.");
+        const code=stop.type==="public"?stop.code:stop.pub?.code;
         const byCode=new Map(all.map(s=>[s.code,s]));
-        const dir=direction(svc,stop.code,row?.buses?.find(b=>b.dest)?.dest);
+        const dir=direction(svc,code,row?.buses?.find(b=>b.dest)?.dest);
         const codes=svc.routes[dir]||[];
-        const at=codes.indexOf(stop.code);
         const line=decodePolyline(lines[svcNo]?.[dir]||"",5);
         const stopsSeq=codes.map(c=>byCode.get(c)).filter(Boolean);
-        service={stop,no:svcNo,kind:"public",to:byCode.get(codes.at(-1))?.name||svc.name,line,stops:stopsSeq,at:Math.max(0,stopsSeq.findIndex(s=>s.code===stop.code)),row,codes};
+        service={stop,no:svcNo,kind:"public",to:byCode.get(codes.at(-1))?.name||svc.name,line,stops:stopsSeq,at:Math.max(0,stopsSeq.findIndex(s=>s.code===code)),row,codes};
       }
     }catch(err){ service={stop,no:svcNo,error:err.message||"Couldn't load this route."}; }
     if(activeView==="buses"&&service?.stop===stop){ render({keepMap:true}); drawService(true); }
@@ -237,7 +262,7 @@ views.buses=(()=>{
   async function refreshService(){
     const s=service; if(!s||s.loading||s.error) return;
     try{
-      const rows=s.stop.type==="nus"?await loadShuttleArrivals(s.stop.code):await loadPublicArrivals(s.stop.code);
+      const {rows}=await stopRows(s.stop);
       boards.set(keyOf(s.stop),rows);
       if(service!==s) return;
       s.row=rows.find(r=>String(r.service)===String(s.no));
@@ -249,11 +274,11 @@ views.buses=(()=>{
 
   function stopCardHTML(s,{section}){
     const k=keyOf(s), on=open.has(k), sel=selected&&keyOf(selected)===k;
-    const where=[s.type==="nus"?"NUS shuttle":`Stop ${s.code}`,s.road,s.distance!=null?distanceLabel(s.distance):""].filter(Boolean).join(" · ");
+    const where=[s.pub?`NUS shuttle + stop ${s.pub.code}`:s.type==="nus"?"NUS shuttle":`Stop ${s.code}`,s.road||s.pub?.road,s.distance!=null?distanceLabel(s.distance):""].filter(Boolean).join(" · ");
     return `<div class="card bus-card ${on?"open":""} ${sel?"selected":""}" data-key="${esc(k)}" data-section="${section}">
       <div class="bus-card-head">
         <button class="bus-card-title" data-toggle="${esc(k)}">
-          <span class="bus-stop-icon ${s.type}">${icon(BUS_ICON,16)}</span>
+          <span class="bus-stop-icon ${s.type} ${s.pub?"both":""}">${icon(BUS_ICON,16)}</span>
           <span><b>${esc(s.name)}</b><small>${esc(where)}</small></span>
         </button>
         <button class="icon-btn star ${isFav(s)?"on":""}" data-fav="${esc(k)}" aria-label="${isFav(s)?"Remove from":"Add to"} favourites">${icon("M12 3l2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1L3.2 9.5l6.1-.9z",18)}</button>
@@ -265,7 +290,7 @@ views.buses=(()=>{
 
   function allStops(){
     const out=[], seen=new Set();
-    for(const [section,list] of [["searched",searched?[searched]:[]],["fav",state.busFavs||[]],["near",area?.stops||[]]])
+    for(const [section,list] of [["searched",searched?[searched]:[]],["fav",(state.busFavs||[]).map(merged)],["near",area?.stops||[]]])
       for(const s of list){ const k=`${section}|${keyOf(s)}`; if(seen.has(k)) continue; seen.add(k); out.push({s,section}); }
     return out;
   }
@@ -274,7 +299,7 @@ views.buses=(()=>{
     const s=service;
     const head=`<div class="svc-head">
       <button class="link" id="svcBack">‹ ${esc(s.stop.name)}</button>
-      <div class="svc-title"><span class="route-badge ${s.stop.type==="nus"?`nus r-${esc(String(s.no).replace(/[^A-Za-z0-9]/g,""))}`:"public"}">${esc(s.no)}</span>
+      <div class="svc-title"><span class="route-badge ${s.kind==="nus"?`nus r-${esc(String(s.no).replace(/[^A-Za-z0-9]/g,""))}`:"public"}">${esc(s.no)}</span>
         <b>${s.to?`to ${esc(s.to)}`:"Route"}</b></div>
       <small>At ${esc(s.stop.name)}</small></div>`;
     if(s.loading) return `${head}<div class="empty-inline"><span class="spinner sm"></span>Loading the route…</div>`;
@@ -291,7 +316,7 @@ views.buses=(()=>{
 
   function sheetHTML(){
     if(service) return serviceHTML();
-    const favs=state.busFavs||[], favKeys=new Set(favs.map(keyOf));
+    const favs=(state.busFavs||[]).map(merged), favKeys=new Set(favs.map(keyOf));
     const areaList=(area?.stops||[]).filter(s=>!favKeys.has(keyOf(s)));
     return `<div class="bus-search">
         ${icon("M11 19a8 8 0 1 0 0-16 8 8 0 0 0 0 16zM21 21l-4.3-4.3",18)}
@@ -361,7 +386,7 @@ views.buses=(()=>{
     $$("[data-fav]",body).forEach(b=>b.onclick=()=>{
       const k=b.dataset.fav, s=allStops().find(x=>keyOf(x.s)===k)?.s;
       if(!s) return;
-      if(isFav(s)) state.busFavs=state.busFavs.filter(f=>keyOf(f)!==k);
+      if(isFav(s)) state.busFavs=state.busFavs.filter(f=>keyOf(f)!==k&&!(s.pub&&f.type==="public"&&f.code===s.pub.code));
       else{ state.busFavs=[...(state.busFavs||[]),{type:s.type,code:s.code,name:s.name,lat:s.lat,lng:s.lng,road:s.road||""}]; open.add(k); }
       save(); renderSheet(); drawPins();
     });
@@ -376,7 +401,7 @@ views.buses=(()=>{
         const rows=await searchStops(q);
         if(input.value.trim()!==q) return;
         box.hidden=false;
-        box.innerHTML=rows.length?rows.map((s,i)=>`<button class="bus-result" data-i="${i}"><b>${esc(s.name)}</b><small>${esc(s.type==="nus"?"NUS shuttle":`${s.code}${s.road?` · ${s.road}`:""}`)}</small></button>`).join("")
+        box.innerHTML=rows.length?rows.map((s,i)=>`<button class="bus-result" data-i="${i}"><b>${esc(s.name)}</b><small>${esc(s.pub?`NUS shuttle + stop ${s.pub.code}`:s.type==="nus"?"NUS shuttle":`${s.code}${s.road?` · ${s.road}`:""}`)}</small></button>`).join("")
           :`<div class="empty-inline">No stops match “${esc(q)}”.</div>`;
         $$(".bus-result",box).forEach(b=>b.onclick=()=>{
           const s=rows[+b.dataset.i];
@@ -397,7 +422,10 @@ views.buses=(()=>{
       if(sc>=40) rows.push({...s,score:sc});
     }
     if(pos) rows.forEach(r=>r.distance=distanceM(pos,r));
-    return rows.sort((a,b)=>b.score-a.score||(a.distance??0)-(b.distance??0)).slice(0,12);
+    pairs=await sharedStops();
+    const seen=new Set();
+    return rows.sort((a,b)=>b.score-a.score||(a.distance??0)-(b.distance??0)).map(merged)
+      .filter(s=>!seen.has(keyOf(s))&&seen.add(keyOf(s))).slice(0,12);
   }
 
   // Fetches the boards that are open and drops them in without re-rendering.

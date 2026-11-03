@@ -865,3 +865,8 @@ body.sheet-open{overflow:hidden}
   .bus-map{left:420px}
   .bus-locate{top:auto;bottom:20px}
 }
+
+/* A shuttle stop sharing its spot with a public stop: both colours */
+.bus-pin.both{background:linear-gradient(90deg,#ef4444 50%,#16a34a 50%)}
+.bus-stop-icon.both{background:linear-gradient(90deg,color-mix(in srgb,#ef4444 18%,var(--surface2)) 50%,color-mix(in srgb,#16a34a 18%,var(--surface2)) 50%);color:var(--text)}
+.bus-note{margin:8px 0 0;padding:8px 10px;border-radius:10px;background:color-mix(in srgb,var(--warn) 12%,var(--surface2));color:var(--text);font-size:12.5px}
