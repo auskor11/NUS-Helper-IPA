@@ -182,23 +182,8 @@ views.map=(()=>{
 
   function mapStylePref(){ try{ return localStorage.getItem("nus_map_style")||"auto"; }catch{ return "auto"; } }
 
-  // MapLibre is ~850 KB, so it loads the first time the map is opened rather
-  // than at app start-up.
-  let mapLibrePromise=null, mapLibreFailed=false;
-  function loadMapLibre(){
-    if(L.maplibreGL) return Promise.resolve();
-    if(mapLibrePromise) return mapLibrePromise;
-    const add=(tag,attrs)=>new Promise((resolve,reject)=>{
-      const n=Object.assign(document.createElement(tag),attrs);
-      n.onload=resolve; n.onerror=()=>reject(new Error(`Couldn't load ${attrs.src||attrs.href}`));
-      document.head.appendChild(n);
-    });
-    mapLibrePromise=Promise.all([
-      add("link",{rel:"stylesheet",href:"/vendor/maplibre/maplibre-gl.css"}),
-      add("script",{src:"/vendor/maplibre/maplibre-gl.js"}).then(()=>add("script",{src:"/vendor/maplibre/leaflet-maplibre-gl.js"}))
-    ]).catch(err=>{ console.warn(err); mapLibrePromise=null; throw err; });
-    return mapLibrePromise;
-  }
+  // MapLibre loads the first time a map is opened (loadMapLibre in places.js).
+  let mapLibreFailed=false;
 
   function applyBaseStyle(){
     if(!map) return;

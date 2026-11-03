@@ -77,7 +77,9 @@ async function loadPublicArrivals(code){
     const ms=Number(x.duration_ms), t=new Date(x.time||x.estimatedArrival||"").getTime();
     const m=Number.isFinite(ms) ? Math.max(0,Math.round(ms/60000))
       : Number.isFinite(t) ? Math.max(0,Math.round((t-Date.now())/60000)) : null;
-    return m==null ? null : {m,type:x.type||"",load:x.load||""};
+    // Live GPS position (0 when the bus isn't being tracked) and where it's heading, for the Buses map.
+    const lat=Number(x.lat), lng=Number(x.lng);
+    return m==null ? null : {m,type:x.type||"",load:x.load||"",...(lat>1&&lng>100?{lat,lng}:{}),dest:x.destination_code||""};
   };
   return (data?.services||[]).map(s=>etaRow(s.no,[arrival(s.next),arrival(s.next2||s.subsequent),arrival(s.next3)],"public")).sort(byNextArrival);
 }
@@ -91,7 +93,7 @@ function etaRow(service,list,kind){
     .filter(x=>x&&x.m!=null&&!seen.has(x.m)&&seen.add(x.m))
     .sort((a,b)=>a.m-b.m).slice(0,3);
   const times=arrivals.map(x=>x.m);
-  return {service,kind,times,buses:arrivals.map(({type="",load=""})=>({type,load})),next:times[0]??null,then:times[1]??null};
+  return {service,kind,times,buses:arrivals.map(({type="",load="",lat,lng,dest=""})=>({type,load,lat,lng,dest})),next:times[0]??null,then:times[1]??null};
 }
 
 const BUS_TYPES={DD:"Double",SD:"Single",BD:"Bendy"};
@@ -100,10 +102,11 @@ function byNextArrival(a,b){ return (a.next??999)-(b.next??999); }
 
 // One row per service with the next three buses side by side, like SingaBus:
 // minutes away (coloured by how full the bus is) over its deck type.
-function etaRowsHTML(rows){
+// tap: rows become buttons (data-svc) that show the service on the Buses map.
+function etaRowsHTML(rows,{tap=false}={}){
   const hasLoad=rows.some(r=>r.buses?.some(b=>BUS_LOADS[b.load]));
   return `<div class="eta-list">${rows.map(r=>`
-    <div class="eta-row">
+    <${tap?`button type="button" class="eta-row tap" data-svc="${esc(r.service)}"`:`div class="eta-row"`}>
       <span class="route-badge ${r.kind==="nus"?`nus r-${esc(String(r.service).replace(/[^A-Za-z0-9]/g,""))}`:"public"}">${esc(r.service)}</span>
       <span class="eta-cells">${[0,1,2].map(i=>{
         const m=r.times[i], b=r.buses?.[i]||{};
@@ -111,7 +114,7 @@ function etaRowsHTML(rows){
         return `<span class="eta-cell ${BUS_LOADS[b.load]?`load-${esc(b.load)}`:""}" ${BUS_LOADS[b.load]?`title="${esc(BUS_LOADS[b.load])}"`:""}>
           <b>${m<=0?"Arr":m}</b><small>${esc(BUS_TYPES[b.type]||(i===0&&r.kind==="nus"?"min":""))}</small></span>`;
       }).join("")}</span>
-    </div>`).join("")}
+    </${tap?"button":"div"}>`).join("")}
     <p class="eta-legend">Minutes away${hasLoad?` · <i class="load-SEA">●</i> seats <i class="load-SDA">●</i> standing <i class="load-LSD">●</i> packed`:""}</p>
   </div>`;
 }
@@ -157,6 +160,31 @@ async function combinedArrivals(stop){
     pubStop&&loadPublicArrivals(pubStop.code).then(r=>rows.push(...r)).catch(()=>{})
   ]);
   return {rows:rows.filter(r=>r.next!=null).sort(byNextArrival),shuttleBlocked:shuttleBlocked&&!isNativeApp(),nusStop,pubStop};
+}
+
+/* ---------- Bus routes (busrouter.sg, from LTA) ---------- */
+// services: {"173": {name, routes: [[stop codes, one direction], [the other]]}}
+// routes:   {"173": [encoded line for direction 0, direction 1]}
+let busServicesPromise=null, busRoutesPromise=null;
+const loadBusServices=()=>busServicesPromise??=getJSON("https://data.busrouter.sg/v1/services.min.json",{timeout:20000}).catch(err=>{ busServicesPromise=null; throw err; });
+const loadBusRouteLines=()=>busRoutesPromise??=getJSON("https://data.busrouter.sg/v1/routes.min.json",{timeout:20000}).catch(err=>{ busRoutesPromise=null; throw err; });
+
+// MapLibre (vector map style) is ~850 KB, so it loads the first time a map is opened. Shared by the
+// Map and Buses tabs.
+let mapLibrePromise=null;
+function loadMapLibre(){
+  if(L.maplibreGL) return Promise.resolve();
+  if(mapLibrePromise) return mapLibrePromise;
+  const add=(tag,attrs)=>new Promise((resolve,reject)=>{
+    const n=Object.assign(document.createElement(tag),attrs);
+    n.onload=resolve; n.onerror=()=>reject(new Error(`Couldn't load ${attrs.src||attrs.href}`));
+    document.head.appendChild(n);
+  });
+  mapLibrePromise=Promise.all([
+    add("link",{rel:"stylesheet",href:"/vendor/maplibre/maplibre-gl.css"}),
+    add("script",{src:"/vendor/maplibre/maplibre-gl.js"}).then(()=>add("script",{src:"/vendor/maplibre/leaflet-maplibre-gl.js"}))
+  ]).catch(err=>{ console.warn(err); mapLibrePromise=null; throw err; });
+  return mapLibrePromise;
 }
 
 /* ---------- Public bus stop catalogue ---------- */
